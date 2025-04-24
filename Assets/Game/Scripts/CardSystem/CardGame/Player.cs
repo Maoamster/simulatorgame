@@ -31,6 +31,42 @@ public class Player : MonoBehaviour
         ShuffleDeck();
     }
 
+    public void AddCardToField(Card card)
+    {
+        if (_field.Count >= maxFieldSize)
+            return;
+
+        _field.Add(card);
+
+        // Create visual
+        CreateCardVisual(card, fieldArea);
+
+        // Trigger card's play effect
+        card.OnPlay(CardGameManager.Instance, this, null);
+    }
+
+    public void ReplaceCard(Card oldCard, Card newCard)
+    {
+        // Find the index of the old card
+        int index = _field.IndexOf(oldCard);
+        if (index >= 0)
+        {
+            // Remove old card
+            _field.RemoveAt(index);
+            _graveyard.Add(oldCard);
+
+            // Destroy visual
+            if (oldCard.visualInstance != null)
+                Destroy(oldCard.visualInstance.gameObject);
+
+            // Add new card
+            _field.Insert(index, newCard);
+
+            // Create visual
+            CreateCardVisual(newCard, fieldArea);
+        }
+    }
+
     public void InitializeDeck()
     {
         _deck.Clear();
@@ -99,6 +135,36 @@ public class Player : MonoBehaviour
         }
     }
 
+    public void RemoveCardFromField(Card card)
+    {
+        if (_field.Contains(card))
+        {
+            _field.Remove(card);
+
+            // If the card has a visual instance, destroy it
+            if (card.visualInstance != null)
+            {
+                Destroy(card.visualInstance.gameObject);
+            }
+        }
+    }
+
+    public void AddCardToHand(Card card)
+    {
+        if (_hand.Count < maxHandSize)
+        {
+            _hand.Add(card);
+
+            // Create visual in hand
+            CreateCardVisual(card, handArea);
+        }
+        else
+        {
+            // Hand is full, discard the card
+            _graveyard.Add(card);
+        }
+    }
+
     public bool PlayCard(Card card, List<Card> targets = null)
     {
         if (!_hand.Contains(card))
@@ -129,6 +195,9 @@ public class Player : MonoBehaviour
             // For non-creature cards, add to graveyard after playing
             _graveyard.Add(card);
         }
+
+        // Notify the game manager that a card was played
+        CardGameManager.Instance.NotifyCardPlayed(this, card);
 
         // Trigger card's play effect
         card.OnPlay(CardGameManager.Instance, this, targets);

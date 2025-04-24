@@ -10,11 +10,30 @@ public class CreatureCard : Card
     public int currentHealth;
     public int currentAttack;
 
+    public bool isFrozen = false;
+    public bool isStealth = false;
+
     private void OnEnable()
     {
         // Initialize current stats from base stats
         currentHealth = health;
         currentAttack = attack;
+    }
+
+    public void ResetToBaseStats()
+    {
+        currentAttack = attack;
+        currentHealth = health;
+    }
+
+    public void ClearEffects()
+    {
+        // Clear any ongoing effects
+        // This is a placeholder - you'll need to implement based on your effect system
+        isFrozen = false;
+        isStealth = false;
+
+        // If you have any event subscriptions, unsubscribe here
     }
 
     public void TakeDamage(int amount)

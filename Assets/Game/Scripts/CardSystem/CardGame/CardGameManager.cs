@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using static CardEffect;
 
 public class CardGameManager : MonoBehaviour
 {
@@ -10,6 +11,14 @@ public class CardGameManager : MonoBehaviour
     public Player playerOne;
     public Player playerTwo;
     public bool isPlayerOneTurn = true;
+    public delegate void SpellCastHandler(Player caster, Card spell);
+    public event SpellCastHandler OnSpellCast;
+
+    public delegate void TurnEndHandler(Player player);
+    public event TurnEndHandler OnTurnEnd;
+
+    public delegate void CardPlayedHandler(Player player, Card card);
+    public event CardPlayedHandler OnCardPlayed;
 
     [Header("UI References")]
     public RectTransform playArea;
@@ -40,6 +49,8 @@ public class CardGameManager : MonoBehaviour
     private Card _targetingCard;
     private Player _targetingPlayer;
     private LineRenderer _targetingLine;
+    private Dictionary<Player, List<System.Action>> _startOfTurnEffects = new Dictionary<Player, List<System.Action>>();
+    private List<DelayedEffect> _delayedEffects = new List<DelayedEffect>();
 
     private void Awake()
     {
@@ -98,20 +109,102 @@ public class CardGameManager : MonoBehaviour
         StartTurn();
     }
 
+
+
     public void StartTurn()
     {
         Player currentPlayer = isPlayerOneTurn ? playerOne : playerTwo;
         currentPlayer.StartTurn();
+
+        // Trigger start of turn effects
+        if (_startOfTurnEffects.ContainsKey(currentPlayer))
+        {
+            foreach (System.Action effect in _startOfTurnEffects[currentPlayer])
+            {
+                effect();
+            }
+        }
+
+        // Process delayed effects
+        ProcessDelayedEffects();
 
         // Update UI
         turnText.text = $"Turn {_currentTurn}: {currentPlayer.playerName}'s Turn";
         endTurnButton.interactable = true;
     }
 
+    private void ProcessDelayedEffects()
+    {
+        for (int i = _delayedEffects.Count - 1; i >= 0; i--)
+        {
+            DelayedEffect effect = _delayedEffects[i];
+            effect.turnsRemaining--;
+
+            if (effect.turnsRemaining <= 0)
+            {
+                // Trigger the effect
+                effect.effect();
+
+                // Remove from list
+                _delayedEffects.RemoveAt(i);
+            }
+        }
+    }
+
+    public void RegisterStartOfTurnEffect(Card card, System.Action<Player> effect)
+    {
+        Player owner = GetCardOwner(card);
+        if (owner != null)
+        {
+            if (!_startOfTurnEffects.ContainsKey(owner))
+            {
+                _startOfTurnEffects[owner] = new List<System.Action>();
+            }
+
+            _startOfTurnEffects[owner].Add(() => effect(owner));
+        }
+    }
+
+    public void RegisterDelayedEffect(Player owner, int turns, System.Action effect)
+    {
+        _delayedEffects.Add(new DelayedEffect
+        {
+            owner = owner,
+            turnsRemaining = turns,
+            effect = effect
+        });
+    }
+
+    public void ShowDiscoverUI(List<Card> options, System.Action<Card> onCardSelected)
+    {
+        // This is a placeholder - you'll need to implement the UI
+        Debug.Log("Showing discover UI with " + options.Count + " options");
+
+        // For now, just select the first option automatically
+        if (options.Count > 0)
+        {
+            onCardSelected(options[0]);
+        }
+    }
+
+    public void ShowAdaptUI(List<AdaptOption> options, System.Action<AdaptOption> onOptionSelected)
+    {
+        // This is a placeholder - you'll need to implement the UI
+        Debug.Log("Showing adapt UI with " + options.Count + " options");
+
+        // For now, just select the first option automatically
+        if (options.Count > 0)
+        {
+            onOptionSelected(options[0]);
+        }
+    }
+
     public void EndTurn()
     {
         Player currentPlayer = isPlayerOneTurn ? playerOne : playerTwo;
-        currentPlayer.EndTurn();
+
+        // Trigger turn end event
+        OnTurnEnd?.Invoke(currentPlayer);
 
         // Switch turns
         isPlayerOneTurn = !isPlayerOneTurn;
@@ -131,6 +224,17 @@ public class CardGameManager : MonoBehaviour
 
         // Start next turn
         StartTurn();
+    }
+
+    public void NotifyCardPlayed(Player player, Card card)
+    {
+        OnCardPlayed?.Invoke(player, card);
+
+        // If it's a spell, also trigger the spell cast event
+        if (card.type == Card.CardType.Spell)
+        {
+            OnSpellCast?.Invoke(player, card);
+        }
     }
 
     public void EndGame(Player loser)
@@ -240,6 +344,26 @@ public class CardGameManager : MonoBehaviour
                 }
             }
         }
+
+        return null;
+    }
+
+    public Card GetSheepCard()
+    {
+        // Return a predefined sheep card
+        // You'll need to create this card asset
+        return Resources.Load<Card>("Cards/Sheep");
+    }
+
+    public Player GetCardOwner(Card card)
+    {
+        // Check if card is in player one's field or hand
+        if (playerOne.GetFieldCards().Contains(card) || playerOne.GetHandCards().Contains(card))
+            return playerOne;
+
+        // Check if card is in player two's field or hand
+        if (playerTwo.GetFieldCards().Contains(card) || playerTwo.GetHandCards().Contains(card))
+            return playerTwo;
 
         return null;
     }

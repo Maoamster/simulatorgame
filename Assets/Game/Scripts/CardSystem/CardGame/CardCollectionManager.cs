@@ -28,6 +28,12 @@ public class CardCollectionManager : MonoBehaviour
         LoadCollection();
     }
 
+    public List<Card> GetAllCards()
+    {
+        // Return a copy of all available cards
+        return new List<Card>(allCards);
+    }
+
     public void AddCardToCollection(Card card, int count = 1)
     {
         if (_playerCollection.ContainsKey(card))
