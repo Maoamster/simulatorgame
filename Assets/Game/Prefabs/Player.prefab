@@ -471,16 +471,16 @@ MonoBehaviour:
   - {fileID: 8300000, guid: a653d760858a6604f85ca8a9a4233315, type: 3}
   footstepRate: 1
   runFootstepRateMultiplier: 1.5
-  footstepVolumeMin: 0.1
-  footstepVolumeMax: 0.2
+  footstepVolumeMin: 0.5
+  footstepVolumeMax: 0.6
   leftFoot: {fileID: 1897586217874911601}
   rightFoot: {fileID: 560536254512132371}
   jumpSounds:
   - {fileID: 8300000, guid: a07fe5c08a444374da0553eb4f578740, type: 3}
   landSounds:
   - {fileID: 8300000, guid: 357c7603cd9ddf846b428019de79cbc1, type: 3}
-  landVolumeMin: 0.2
-  landVolumeMax: 0.3
+  landVolumeMin: 0.5
+  landVolumeMax: 0.6
   landPitchMin: 0.5
   landPitchMax: 1.8
   mediumLandThreshold: 10
@@ -488,7 +488,7 @@ MonoBehaviour:
   interactionDistance: 2
   interactionLayers:
     serializedVersion: 2
-    m_Bits: 0
+    m_Bits: 256
 --- !u!1 &8537992398036681188
 GameObject:
   m_ObjectHideFlags: 0
