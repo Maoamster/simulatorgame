@@ -1386,7 +1386,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1896565412
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1758,12 +1758,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2ff05109883cffb4eba4ad598f537868, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  dialoguePanel: {fileID: 0}
-  speakerNameText: {fileID: 0}
-  dialogueText: {fileID: 0}
-  speakerPortrait: {fileID: 0}
-  choicesContainer: {fileID: 0}
-  choiceButtonPrefab: {fileID: 0}
+  dialoguePanel: {fileID: 1979581636}
+  speakerNameText: {fileID: 548639796}
+  dialogueText: {fileID: 1081112706}
+  speakerPortrait: {fileID: 197565655}
+  choicesContainer: {fileID: 620451762}
+  choiceButtonPrefab: {fileID: 8289037702371799018, guid: 0e6e6710feb79fa4a859e5a7da399686,
+    type: 3}
   backgroundPanel: {fileID: 0}
   appearDuration: 0.5
   typingSpeed: 0.03

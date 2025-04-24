@@ -476,7 +476,7 @@ MonoBehaviour:
   leftFoot: {fileID: 1897586217874911601}
   rightFoot: {fileID: 560536254512132371}
   jumpSounds:
-  - {fileID: 8300000, guid: 2fbb7c9589bcd314b9d171a80587af89, type: 3}
+  - {fileID: 8300000, guid: a07fe5c08a444374da0553eb4f578740, type: 3}
   landSounds:
   - {fileID: 8300000, guid: 357c7603cd9ddf846b428019de79cbc1, type: 3}
   landVolumeMin: 0.2
