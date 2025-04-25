@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3eaff03519f76f04ca657ccf9e2a6224, type: 3}
+  m_Name: MechAssembler_Card
+  m_EditorClassIdentifier: 
+  cardName: Mech Assembler
+  cardDescription: Creates smaller mechs from spare parts.
+  cardArtwork: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  manaCost: 4
+  type: 0
+  attack: 2
+  health: 3
+  hasCharge: 0
+  hasTaunt: 0
+  cardEffects:
+  - effectType: 6
+    targetType: 0
+    effectValue: 1
+    effectDescription: When played, summon a 1/1 Micro Bot.
+    specificCardToSummon: {fileID: 11400000, guid: 74fa85a4ada98124aa225f4f21a851d1,
+      type: 2}
+    creatureType: Mech
+    secondaryValue: 0
+    isTemporary: 0
+    durationTurns: 0
+    condition: 0
+    timing: 0
+  cardColor: {r: 0.8666667, g: 0.6666667, b: 0.26666668, a: 1}
+  specialEffectPrefab: {fileID: 0}
+  playSound: {fileID: 0}
+  attackSound: {fileID: 0}
+  deathSound: {fileID: 0}
+  canAttackThisTurn: 0
+  isTaunting: 0
+  isDivine: 0
+  currentHealth: 3
+  currentAttack: 2
+  isFrozen: 0
+  isStealth: 0

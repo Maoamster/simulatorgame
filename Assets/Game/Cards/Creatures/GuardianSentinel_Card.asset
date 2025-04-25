@@ -12,17 +12,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3eaff03519f76f04ca657ccf9e2a6224, type: 3}
   m_Name: GuardianSentinel_Card
   m_EditorClassIdentifier: 
-  cardName: 
-  cardDescription: 
-  cardArtwork: {fileID: 0}
-  manaCost: 0
+  cardName: Guardian Sentinel
+  cardDescription: Sworn to protect, it stands as the first line of defense.
+  cardArtwork: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  manaCost: 2
   type: 0
-  attack: 0
-  health: 0
+  attack: 2
+  health: 3
   hasCharge: 0
-  hasTaunt: 0
+  hasTaunt: 1
   cardEffects: []
-  cardColor: {r: 1, g: 1, b: 1, a: 1}
+  cardColor: {r: 0.5254902, g: 0.5254902, b: 0.8392157, a: 1}
   specialEffectPrefab: {fileID: 0}
   playSound: {fileID: 0}
   attackSound: {fileID: 0}
@@ -30,7 +30,7 @@ MonoBehaviour:
   canAttackThisTurn: 0
   isTaunting: 0
   isDivine: 0
-  currentHealth: 0
-  currentAttack: 0
+  currentHealth: 3
+  currentAttack: 2
   isFrozen: 0
   isStealth: 0

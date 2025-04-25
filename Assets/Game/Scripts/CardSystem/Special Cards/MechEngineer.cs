@@ -4,7 +4,7 @@ using System.Collections.Generic;
 [CreateAssetMenu(fileName = "MechEngineer", menuName = "Cards/Special/MechEngineer")]
 public class MechEngineer : CreatureCard
 {
-    [SerializeField] private List<Card> mechCards; // Assign your mech cards in the inspector
+    [SerializeField] private List<Card> mechCards; // Assign your 5 mech cards in the inspector
 
     public override void OnPlay(CardGameManager gameManager, Player owner, List<Card> targets = null)
     {
@@ -21,6 +21,13 @@ public class MechEngineer : CreatureCard
 
             // Add to hand
             owner.AddCardToHand(cardCopy);
+
+            // Visual feedback
+            Debug.Log($"Added {randomMech.cardName} to hand");
+        }
+        else
+        {
+            Debug.LogWarning("MechEngineer: No mech cards assigned!");
         }
     }
 }

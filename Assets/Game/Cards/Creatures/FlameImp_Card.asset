@@ -12,17 +12,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3eaff03519f76f04ca657ccf9e2a6224, type: 3}
   m_Name: FlameImp_Card
   m_EditorClassIdentifier: 
-  cardName: 
-  cardDescription: 
-  cardArtwork: {fileID: 0}
-  manaCost: 0
+  cardName: Flame Imp
+  cardDescription: Small but fierce, it burns friend and foe alike.
+  cardArtwork: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  manaCost: 1
   type: 0
-  attack: 0
-  health: 0
+  attack: 3
+  health: 2
   hasCharge: 0
   hasTaunt: 0
-  cardEffects: []
-  cardColor: {r: 1, g: 1, b: 1, a: 1}
+  cardEffects:
+  - effectType: 0
+    targetType: 8
+    effectValue: 2
+    effectDescription: When played, deal 2 damage to your hero.
+    specificCardToSummon: {fileID: 0}
+    creatureType: 
+    secondaryValue: 0
+    isTemporary: 0
+    durationTurns: 0
+    condition: 0
+    timing: 0
+  cardColor: {r: 1, g: 0.15294118, b: 0.078431375, a: 1}
   specialEffectPrefab: {fileID: 0}
   playSound: {fileID: 0}
   attackSound: {fileID: 0}
@@ -30,7 +41,7 @@ MonoBehaviour:
   canAttackThisTurn: 0
   isTaunting: 0
   isDivine: 0
-  currentHealth: 0
-  currentAttack: 0
+  currentHealth: 2
+  currentAttack: 3
   isFrozen: 0
   isStealth: 0

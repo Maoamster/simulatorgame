@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3eaff03519f76f04ca657ccf9e2a6224, type: 3}
   m_Name: Sheep_Card
   m_EditorClassIdentifier: 
-  cardName: 
-  cardDescription: 
-  cardArtwork: {fileID: 0}
-  manaCost: 0
+  cardName: Sheep
+  cardDescription: Baaaaa!
+  cardArtwork: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  manaCost: 1
   type: 0
-  attack: 0
-  health: 0
+  attack: 1
+  health: 1
   hasCharge: 0
   hasTaunt: 0
   cardEffects: []
@@ -30,7 +30,7 @@ MonoBehaviour:
   canAttackThisTurn: 0
   isTaunting: 0
   isDivine: 0
-  currentHealth: 0
-  currentAttack: 0
+  currentHealth: 1
+  currentAttack: 1
   isFrozen: 0
   isStealth: 0

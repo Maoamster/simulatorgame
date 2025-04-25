@@ -12,17 +12,28 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3eaff03519f76f04ca657ccf9e2a6224, type: 3}
   m_Name: HealingSprite_Card
   m_EditorClassIdentifier: 
-  cardName: 
-  cardDescription: 
-  cardArtwork: {fileID: 0}
-  manaCost: 0
+  cardName: Healing Sprite
+  cardDescription: Its gentle glow mends wounds and soothes pain.
+  cardArtwork: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  manaCost: 2
   type: 0
-  attack: 0
-  health: 0
+  attack: 1
+  health: 3
   hasCharge: 0
   hasTaunt: 0
-  cardEffects: []
-  cardColor: {r: 1, g: 1, b: 1, a: 1}
+  cardEffects:
+  - effectType: 1
+    targetType: 8
+    effectValue: 1
+    effectDescription: At the end of your turn, restore 1 health to your hero.
+    specificCardToSummon: {fileID: 0}
+    creatureType: 
+    secondaryValue: 0
+    isTemporary: 0
+    durationTurns: 0
+    condition: 0
+    timing: 1
+  cardColor: {r: 0.7411765, g: 1, b: 0.60784316, a: 1}
   specialEffectPrefab: {fileID: 0}
   playSound: {fileID: 0}
   attackSound: {fileID: 0}
@@ -30,7 +41,7 @@ MonoBehaviour:
   canAttackThisTurn: 0
   isTaunting: 0
   isDivine: 0
-  currentHealth: 0
-  currentAttack: 0
+  currentHealth: 3
+  currentAttack: 1
   isFrozen: 0
   isStealth: 0
