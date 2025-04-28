@@ -12,6 +12,7 @@ public class CreatureCard : Card
 
     public bool isFrozen = false;
     public bool isStealth = false;
+    public bool hasAttackedThisTurn = false;
 
     private void OnEnable()
     {

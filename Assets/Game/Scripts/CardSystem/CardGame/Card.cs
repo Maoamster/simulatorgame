@@ -26,6 +26,7 @@ public class Card : ScriptableObject
     [Header("Visual")]
     public Color cardColor = Color.white;
     public GameObject specialEffectPrefab;
+    public Rarity rarity = Rarity.Common;
 
     [Header("Audio")]
     public AudioClip playSound;
@@ -44,6 +45,14 @@ public class Card : ScriptableObject
         {
             effect.ApplyEffect(gameManager, owner, targets);
         }
+    }
+
+    public enum Rarity
+    {
+        Common,
+        Rare,
+        Epic,
+        Legendary
     }
 
     public virtual void OnAttack(Card target)

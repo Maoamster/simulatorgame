@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.UI;
+using DG.Tweening;
 
 public class Player : MonoBehaviour
 {
@@ -30,6 +31,159 @@ public class Player : MonoBehaviour
     {
         InitializeDeck();
         ShuffleDeck();
+    }
+
+    public int GetDeckCount()
+    {
+        return _deck.Count;
+    }
+
+    public int GetHandCount()
+    {
+        return _hand.Count;
+    }
+
+    public Card GetTopDeckCard()
+    {
+        if (_deck.Count > 0)
+            return _deck[0];
+        return null;
+    }
+
+    public void DiscardFromDeck(int count = 1)
+    {
+        for (int i = 0; i < count && _deck.Count > 0; i++)
+        {
+            Card discardedCard = _deck[0];
+            _deck.RemoveAt(0);
+            _graveyard.Add(discardedCard);
+        }
+    }
+
+    public void DrawCardWithAnimation()
+    {
+        if (_deck.Count == 0)
+        {
+            // Fatigue damage handled by CardGameManager
+            return;
+        }
+
+        if (_hand.Count >= maxHandSize)
+        {
+            // Burning card handled by CardGameManager
+            return;
+        }
+
+        // Get the card from the deck
+        Card drawnCard = _deck[0];
+        _hand.Add(drawnCard);
+        _deck.RemoveAt(0);
+
+        // Create card visual in hand with animation
+        GameObject cardObj = Instantiate(cardPrefab, handArea);
+        CardVisual cardVisual = cardObj.GetComponent<CardVisual>();
+
+        if (cardVisual != null)
+        {
+            cardVisual.SetupCard(drawnCard, this);
+
+            // Start the card off-screen
+            RectTransform rectTransform = cardObj.GetComponent<RectTransform>();
+            rectTransform.anchoredPosition = new Vector2(0, -300); // Below the hand
+
+            // Animate it into position
+            rectTransform.DOAnchorPos(Vector2.zero, 0.5f).SetEase(Ease.OutBack);
+
+            // Scale animation
+            cardObj.transform.localScale = Vector3.zero;
+            cardObj.transform.DOScale(Vector3.one, 0.5f).SetEase(Ease.OutBack);
+        }
+    }
+
+    public bool PlayCardToSlot(Card card, int slotIndex)
+    {
+        if (!_hand.Contains(card))
+            return false;
+
+        if (currentMana < card.manaCost)
+            return false;
+
+        if (card.type != Card.CardType.Creature)
+            return false;
+
+        if (slotIndex < 0 || slotIndex >= maxFieldSize)
+            return false;
+
+        // Check if slot is already occupied
+        if (_field.Count > slotIndex && _field[slotIndex] != null)
+            return false;
+
+        // Pay mana cost
+        currentMana -= card.manaCost;
+
+        // Update mana display
+        if (CardGameManager.Instance.playerManaDisplay != null && this == CardGameManager.Instance.playerOne)
+        {
+            CardGameManager.Instance.playerManaDisplay.AnimateManaCrystalUse(card.manaCost);
+            CardGameManager.Instance.playerManaDisplay.UpdateManaDisplay(currentMana, maxMana);
+        }
+        else if (CardGameManager.Instance.opponentManaDisplay != null && this == CardGameManager.Instance.playerTwo)
+        {
+            CardGameManager.Instance.opponentManaDisplay.AnimateManaCrystalUse(card.manaCost);
+            CardGameManager.Instance.opponentManaDisplay.UpdateManaDisplay(currentMana, maxMana);
+        }
+
+        // Remove from hand
+        _hand.Remove(card);
+
+        // Add to field at specific index
+        while (_field.Count <= slotIndex)
+        {
+            _field.Add(null);
+        }
+        _field[slotIndex] = card;
+
+        // Create card visual on field
+        if (card.visualInstance != null)
+        {
+            // Move existing visual
+            card.visualInstance.transform.SetParent(fieldArea);
+            card.visualInstance.SetFieldCard();
+
+            // Position at the correct slot
+            RectTransform slotRect = fieldArea.GetChild(slotIndex).GetComponent<RectTransform>();
+            card.visualInstance.GetComponent<RectTransform>().anchoredPosition = slotRect.anchoredPosition;
+
+            // Play animation
+            card.visualInstance.PlayCardAnimation();
+        }
+        else
+        {
+            // Create new visual
+            GameObject cardObj = Instantiate(cardPrefab, fieldArea);
+            CardVisual cardVisual = cardObj.GetComponent<CardVisual>();
+
+            if (cardVisual != null)
+            {
+                cardVisual.SetupCard(card, this);
+                cardVisual.SetFieldCard();
+
+                // Position at the correct slot
+                RectTransform slotRect = fieldArea.GetChild(slotIndex).GetComponent<RectTransform>();
+                cardVisual.GetComponent<RectTransform>().anchoredPosition = slotRect.anchoredPosition;
+
+                // Play animation
+                cardVisual.PlayCardAnimation();
+            }
+        }
+
+        // Notify the game manager that a card was played
+        CardGameManager.Instance.NotifyCardPlayed(this, card);
+
+        // Trigger card's play effect
+        card.OnPlay(CardGameManager.Instance, this, null);
+
+        return true;
     }
 
     public void AddCardToField(Card card)
@@ -134,6 +288,16 @@ public class Player : MonoBehaviour
             // Create card visual in hand
             CreateCardVisual(drawnCard, handArea);
         }
+    }
+
+    public bool HasTauntCreatures()
+    {
+        foreach (Card card in _field)
+        {
+            if (card.hasTaunt)
+                return true;
+        }
+        return false;
     }
 
     public void RemoveCardFromField(Card card)

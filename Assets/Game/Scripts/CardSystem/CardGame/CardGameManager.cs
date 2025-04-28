@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using static CardEffect;
+using DG.Tweening;
+using System.Collections;
 
 public class CardGameManager : MonoBehaviour
 {
@@ -20,7 +22,23 @@ public class CardGameManager : MonoBehaviour
     public delegate void CardPlayedHandler(Player player, Card card);
     public event CardPlayedHandler OnCardPlayed;
 
+    [Header("Sounds")]
+    public AudioClip cardSelectSound;
+    public AudioClip cardTargetSound;
+    public AudioClip attackSound;
+    public AudioClip damageSound;
+    public AudioClip healSound;
+    public AudioClip victorySound;
+    public AudioClip defeatSound;
+
     [Header("UI References")]
+    public GameBoardVisuals boardVisuals;
+    public ManaDisplay playerManaDisplay;
+    public ManaDisplay opponentManaDisplay;
+    public HealthDisplay playerHealthDisplay;
+    public HealthDisplay opponentHealthDisplay;
+    public Sprite creatureIcon;
+    public Sprite spellIcon;
     public RectTransform playArea;
     public GameObject cardPreviewPanel;
     public Image cardPreviewImage;
@@ -40,11 +58,20 @@ public class CardGameManager : MonoBehaviour
     public int startingHandSize = 4;
     public int maxTurns = 50;
 
+    [System.Serializable]
+    public class AttackPair
+    {
+        public Card attacker;
+        public Card defender;
+    }
+
     // For targeting
     private Vector3 _targetingStartPos;
     private Vector3 _targetingEndPos;
 
     // Private variables
+    private List<AttackPair> _pendingAttacks = new List<AttackPair>();
+    private CardVisual _selectedAttacker = null;
     private int _currentTurn = 1;
     private Card _targetingCard;
     private Player _targetingPlayer;
@@ -109,7 +136,204 @@ public class CardGameManager : MonoBehaviour
         StartTurn();
     }
 
+    public void SelectAttacker(CardVisual cardVisual)
+    {
+        // Deselect previous attacker if any
+        if (_selectedAttacker != null)
+        {
+            _selectedAttacker.SetSelected(false);
+        }
 
+        // Set new attacker
+        _selectedAttacker = cardVisual;
+        _selectedAttacker.SetSelected(true);
+
+        // Play selection sound
+        if (cardSelectSound != null)
+        {
+            AudioSource.PlayClipAtPoint(cardSelectSound, Camera.main.transform.position);
+        }
+    }
+
+    public void DeselectAttacker(CardVisual cardVisual)
+    {
+        if (_selectedAttacker == cardVisual)
+        {
+            _selectedAttacker.SetSelected(false);
+            _selectedAttacker = null;
+
+            // Remove any pending attacks from this attacker
+            RemovePendingAttacksForCard(cardVisual.GetCard());
+        }
+    }
+
+    public void SetAttackTarget(CardVisual targetCardVisual)
+    {
+        if (_selectedAttacker == null)
+            return;
+
+        Card attackerCard = _selectedAttacker.GetCard();
+        Card targetCard = targetCardVisual.GetCard();
+
+        // Check if target is valid
+        if (IsValidAttackTarget(attackerCard, targetCard))
+        {
+            // Remove any existing attack for this attacker
+            RemovePendingAttacksForCard(attackerCard);
+
+            // Add new attack pair
+            _pendingAttacks.Add(new AttackPair
+            {
+                attacker = attackerCard,
+                defender = targetCard
+            });
+
+            // Update visuals
+            _selectedAttacker.SetAttackTarget(targetCard);
+            targetCardVisual.SetTargeted(true);
+
+            // Deselect attacker
+            _selectedAttacker.SetSelected(false);
+            _selectedAttacker = null;
+        }
+    }
+
+    private bool IsValidAttackTarget(Card attacker, Card defender)
+    {
+        // Check if defender is an enemy card
+        Player attackerOwner = GetCardOwner(attacker);
+        Player defenderOwner = GetCardOwner(defender);
+
+        if (attackerOwner == defenderOwner)
+            return false;
+
+        // Check if defender has taunt
+        if (defenderOwner.HasTauntCreatures() && !defender.hasTaunt)
+            return false;
+
+        return true;
+    }
+
+    private void RemovePendingAttacksForCard(Card card)
+    {
+        for (int i = _pendingAttacks.Count - 1; i >= 0; i--)
+        {
+            if (_pendingAttacks[i].attacker == card)
+            {
+                // Clear target highlight
+                if (_pendingAttacks[i].defender.visualInstance != null)
+                {
+                    _pendingAttacks[i].defender.visualInstance.SetTargeted(false);
+                }
+
+                // Remove attack
+                _pendingAttacks.RemoveAt(i);
+            }
+        }
+    }
+
+    public void DrawCardWithAnimation(Player player, int amount = 1)
+    {
+        for (int i = 0; i < amount; i++)
+        {
+            if (player.GetDeckCount() == 0)
+            {
+                PlayerTakeDamage(player, 1); // Fatigue damage
+                continue;
+            }
+
+            if (player.GetHandCount() >= player.maxHandSize)
+            {
+                // Burn card if hand is full
+                Card burnedCard = player.GetTopDeckCard();
+                player.DiscardFromDeck(1);
+
+                // Show card burn animation
+                if (burnedCard != null && burnedCard.cardArtwork != null)
+                {
+                    // Create temporary visual for the burned card
+                    GameObject burnVisual = new GameObject("BurnedCard");
+                    burnVisual.transform.SetParent(playArea);
+
+                    Image burnImage = burnVisual.AddComponent<Image>();
+                    burnImage.sprite = burnedCard.cardArtwork;
+
+                    // Position above deck
+                    RectTransform burnRect = burnVisual.GetComponent<RectTransform>();
+                    burnRect.anchoredPosition = new Vector2(0, 200);
+                    burnRect.sizeDelta = new Vector2(100, 150);
+
+                    // Burn animation
+                    Sequence burnSequence = DOTween.Sequence();
+                    burnSequence.Append(burnRect.DOScale(1.5f, 0.3f));
+                    burnSequence.Join(burnImage.DOColor(Color.red, 0.3f));
+                    burnSequence.Append(burnRect.DOScale(0, 0.3f));
+                    burnSequence.Join(burnImage.DOFade(0, 0.3f));
+                    burnSequence.OnComplete(() => {
+                        Destroy(burnVisual);
+                    });
+                }
+
+                continue;
+            }
+
+            // Draw the card with animation
+            player.DrawCardWithAnimation();
+        }
+    }
+
+    public void PlayerHeal(Player player, int amount)
+    {
+        player.Heal(amount);
+
+        // Update health display with animation
+        if (player == playerOne && playerHealthDisplay != null)
+        {
+            playerHealthDisplay.UpdateHealthDisplay(player.health);
+        }
+        else if (player == playerTwo && opponentHealthDisplay != null)
+        {
+            opponentHealthDisplay.UpdateHealthDisplay(player.health);
+        }
+
+        // Play heal sound
+        if (healSound != null)
+        {
+            AudioSource.PlayClipAtPoint(healSound, Camera.main.transform.position);
+        }
+    }
+
+    public void PlayerTakeDamage(Player player, int amount)
+    {
+        player.TakeDamage(amount);
+
+        // Update health display with animation
+        if (player == playerOne && playerHealthDisplay != null)
+        {
+            playerHealthDisplay.UpdateHealthDisplay(player.health);
+        }
+        else if (player == playerTwo && opponentHealthDisplay != null)
+        {
+            opponentHealthDisplay.UpdateHealthDisplay(player.health);
+        }
+
+        // Play damage sound
+        if (damageSound != null)
+        {
+            AudioSource.PlayClipAtPoint(damageSound, Camera.main.transform.position);
+        }
+
+        // Check for game over
+        if (player.health <= 0)
+        {
+            EndGame(player);
+        }
+    }
+
+    public Player GetCurrentPlayer()
+    {
+        return isPlayerOneTurn ? playerOne : playerTwo;
+    }
 
     public void StartTurn()
     {
@@ -128,8 +352,14 @@ public class CardGameManager : MonoBehaviour
         // Process delayed effects
         ProcessDelayedEffects();
 
+        // Play turn start visual effects
+        if (boardVisuals != null)
+        {
+            boardVisuals.PlayFieldParticles(isPlayerOneTurn);
+        }
+
         // Update UI
-        turnText.text = $"Turn {_currentTurn}: {currentPlayer.playerName}'s Turn";
+        UpdateUI();
         endTurnButton.interactable = true;
 
         // If it's AI's turn, trigger AI logic
@@ -206,11 +436,57 @@ public class CardGameManager : MonoBehaviour
         }
     }
 
-    public void EndTurn()
+    public void PlayCardToSlot(Card card, int slotIndex)
     {
+        // Check if card is playable
         Player currentPlayer = isPlayerOneTurn ? playerOne : playerTwo;
 
-        // Trigger turn end event
+        if (currentPlayer.GetHandCards().Contains(card) &&
+            card.manaCost <= currentPlayer.currentMana &&
+            slotIndex >= 0 && slotIndex < currentPlayer.maxFieldSize)
+        {
+            // Play the card
+            bool success = currentPlayer.PlayCardToSlot(card, slotIndex);
+
+            if (success)
+            {
+                // Update the board visuals
+                if (boardVisuals != null)
+                {
+                    boardVisuals.PlayFieldParticles(true);
+                }
+            }
+        }
+    }
+
+    public void EndTurn()
+    {
+        // Process all pending attacks
+        StartCoroutine(ProcessAttacksSequentially());
+    }
+
+    private IEnumerator ProcessAttacksSequentially()
+    {
+        // Disable end turn button during attacks
+        endTurnButton.interactable = false;
+
+        // Process each attack with a delay between them
+        for (int i = 0; i < _pendingAttacks.Count; i++)
+        {
+            AttackPair attack = _pendingAttacks[i];
+
+            // Execute the attack
+            yield return StartCoroutine(ExecuteAttackWithAnimation(attack.attacker, attack.defender));
+
+            // Wait a bit between attacks
+            yield return new WaitForSeconds(0.5f);
+        }
+
+        // Clear pending attacks
+        _pendingAttacks.Clear();
+
+        // Continue with normal end turn logic
+        Player currentPlayer = isPlayerOneTurn ? playerOne : playerTwo;
         OnTurnEnd?.Invoke(currentPlayer);
 
         // Switch turns
@@ -220,17 +496,103 @@ public class CardGameManager : MonoBehaviour
         if (isPlayerOneTurn)
         {
             _currentTurn++;
-
-            // Check for max turns
             if (_currentTurn > maxTurns)
             {
                 EndGame(null); // Draw
-                return;
+                yield break;
             }
         }
 
         // Start next turn
         StartTurn();
+    }
+
+    private IEnumerator ExecuteAttackWithAnimation(Card attacker, Card defender)
+    {
+        if (attacker is CreatureCard attackerCreature && defender is CreatureCard defenderCreature)
+        {
+            // Get visual instances
+            CardVisual attackerVisual = attacker.visualInstance;
+            CardVisual defenderVisual = defender.visualInstance;
+
+            if (attackerVisual != null && defenderVisual != null)
+            {
+                // Store original position
+                Vector3 originalPos = attackerVisual.transform.position;
+
+                // Play attack sound
+                if (attackSound != null)
+                {
+                    AudioSource.PlayClipAtPoint(attackSound, attackerVisual.transform.position);
+                }
+
+                // Animate attacker moving toward defender
+                yield return attackerVisual.transform.DOMove(
+                    Vector3.Lerp(originalPos, defenderVisual.transform.position, 0.7f),
+                    0.3f).SetEase(Ease.OutQuad).WaitForCompletion();
+
+                // Play damage sound
+                if (damageSound != null)
+                {
+                    AudioSource.PlayClipAtPoint(damageSound, defenderVisual.transform.position);
+                }
+
+                // Shake defender to show impact
+                defenderVisual.transform.DOShakePosition(0.2f, 10f, 10, 90, false, true);
+
+                // Apply damage
+                defenderCreature.TakeDamage(attackerCreature.attack);
+                attackerCreature.TakeDamage(defenderCreature.attack);
+
+                // Update visuals
+                attackerVisual.UpdateCardVisual();
+                defenderVisual.UpdateCardVisual();
+
+                // Return attacker to original position
+                yield return attackerVisual.transform.DOMove(originalPos, 0.3f)
+                    .SetEase(Ease.InQuad).WaitForCompletion();
+
+                // Mark attacker as having attacked
+                attackerCreature.hasAttackedThisTurn = true;
+
+                // Check if cards died
+                yield return StartCoroutine(CheckCardDeathWithAnimation(defenderCreature));
+                yield return StartCoroutine(CheckCardDeathWithAnimation(attackerCreature));
+            }
+        }
+    }
+
+    private IEnumerator CheckCardDeathWithAnimation(CreatureCard card)
+    {
+        if (card.health <= 0)
+        {
+            CardVisual cardVisual = card.visualInstance;
+
+            if (cardVisual != null)
+            {
+                // Play death animation
+                Sequence deathSequence = DOTween.Sequence();
+
+                // Fade out
+                deathSequence.Append(cardVisual.GetComponent<CanvasGroup>().DOFade(0, 0.5f));
+
+                // Shrink
+                deathSequence.Join(cardVisual.transform.DOScale(Vector3.zero, 0.5f));
+
+                // Rotate
+                deathSequence.Join(cardVisual.transform.DORotate(new Vector3(0, 0, 90), 0.5f, RotateMode.FastBeyond360));
+
+                // Wait for animation to complete
+                yield return deathSequence.WaitForCompletion();
+            }
+
+            // Remove from field
+            Player owner = GetCardOwner(card);
+            if (owner != null)
+            {
+                owner.RemoveCardFromField(card);
+            }
+        }
     }
 
     public void NotifyCardPlayed(Player player, Card card)
@@ -247,6 +609,7 @@ public class CardGameManager : MonoBehaviour
     public void EndGame(Player loser)
     {
         string resultMessage;
+        bool playerWon = false;
 
         if (loser == null)
         {
@@ -256,6 +619,17 @@ public class CardGameManager : MonoBehaviour
         {
             Player winner = (loser == playerOne) ? playerTwo : playerOne;
             resultMessage = $"{winner.playerName} wins!";
+            playerWon = (winner == playerOne);
+
+            // Play victory/defeat sound
+            if (playerWon && victorySound != null)
+            {
+                AudioSource.PlayClipAtPoint(victorySound, Camera.main.transform.position);
+            }
+            else if (!playerWon && defeatSound != null)
+            {
+                AudioSource.PlayClipAtPoint(defeatSound, Camera.main.transform.position);
+            }
         }
 
         Debug.Log(resultMessage);
@@ -265,8 +639,22 @@ public class CardGameManager : MonoBehaviour
         {
             gameOverPanel.SetActive(true);
             gameOverText.text = resultMessage;
+
+            // Add visual effects to game over panel
+            gameOverPanel.transform.localScale = Vector3.zero;
+            gameOverPanel.transform.DOScale(Vector3.one, 0.5f).SetEase(Ease.OutBack);
+
+            // Fade in background
+            Image panelImage = gameOverPanel.GetComponent<Image>();
+            if (panelImage != null)
+            {
+                panelImage.color = new Color(panelImage.color.r, panelImage.color.g, panelImage.color.b, 0);
+                panelImage.DOFade(0.8f, 0.5f);
+            }
         }
     }
+
+
 
     public bool IsPlayerTurn(Player player)
     {
@@ -453,11 +841,27 @@ public class CardGameManager : MonoBehaviour
 
     private void UpdateUI()
     {
-        // Update health and mana text
-        playerOneHealthText.text = $"Health: {playerOne.health}";
-        playerTwoHealthText.text = $"Health: {playerTwo.health}";
-        playerOneManaText.text = $"Mana: {playerOne.currentMana}/{playerOne.maxMana}";
-        playerTwoManaText.text = $"Mana: {playerTwo.currentMana}/{playerTwo.maxMana}";
+        // Update health displays
+        if (playerHealthDisplay != null)
+            playerHealthDisplay.UpdateHealthDisplay(playerOne.health);
+
+        if (opponentHealthDisplay != null)
+            opponentHealthDisplay.UpdateHealthDisplay(playerTwo.health);
+
+        // Update mana displays
+        if (playerManaDisplay != null)
+            playerManaDisplay.UpdateManaDisplay(playerOne.currentMana, playerOne.maxMana);
+
+        if (opponentManaDisplay != null)
+            opponentManaDisplay.UpdateManaDisplay(playerTwo.currentMana, playerTwo.maxMana);
+
+        // Update turn indicator
+        if (boardVisuals != null)
+            boardVisuals.UpdateTurnIndicator(isPlayerOneTurn);
+
+        // Update turn text
+        if (turnText != null)
+            turnText.text = $"Turn {_currentTurn}: {(isPlayerOneTurn ? playerOne.playerName : playerTwo.playerName)}'s Turn";
     }
 
     public void RestartGame()

@@ -16,6 +16,13 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     public TextMeshProUGUI healthText;
     public GameObject creatureStatsPanel;
 
+    [Header("Card Style")]
+    public Image cardBorder;
+    public Image cardTypeIcon;
+    public Image rarityGem;
+    public Image manaCrystal;
+    public GameObject tauntFrame;
+    public ParticleSystem rarityParticles;
 
     [Header("Visual Effects")]
     public GameObject glowEffect;
@@ -28,9 +35,14 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     public float playAnimDuration = 0.5f;
 
     // Private variables
+    private bool _isSelected = false;
+    private Card _targetCard = null;
+    private LineRenderer _attackLine;
+    public GameObject selectionHighlight;
+    public GameObject targetedHighlight;
     private GameObject _fieldHighlight;
     private Color _normalFieldColor;
-    private RectTransform _playerFieldRect; 
+    private RectTransform _playerFieldRect;
     private Transform _originalParent;
     private Card _card;
     private Player _owner;
@@ -44,6 +56,18 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
     private void Awake()
     {
+        _attackLine = gameObject.AddComponent<LineRenderer>();
+        _attackLine.startWidth = 2f;
+        _attackLine.endWidth = 2f;
+        _attackLine.material = new Material(Shader.Find("Sprites/Default"));
+        _attackLine.startColor = Color.red;
+        _attackLine.endColor = Color.red;
+        _attackLine.positionCount = 2;
+        _attackLine.enabled = false;
+
+        if (selectionHighlight != null)
+            selectionHighlight.SetActive(false);
+
         _rectTransform = GetComponent<RectTransform>();
         _canvas = GetComponentInParent<Canvas>();
         _canvasGroup = GetComponent<CanvasGroup>();
@@ -55,6 +79,15 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
         if (glowEffect != null)
             glowEffect.SetActive(false);
+    }
+
+    private void Update()
+    {
+        // Update attack line if needed
+        if (_attackLine.enabled)
+        {
+            UpdateAttackLine();
+        }
     }
 
     public Player GetOwner()
@@ -114,6 +147,70 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         {
             creatureStatsPanel.SetActive(false);
         }
+
+        // Set up visual elements based on card properties
+        if (tauntFrame != null)
+            tauntFrame.SetActive(card.hasTaunt);
+
+        // Set rarity visual
+        if (rarityGem != null)
+        {
+            switch (card.rarity)
+            {
+                case Card.Rarity.Common:
+                    rarityGem.color = Color.white;
+                    break;
+                case Card.Rarity.Rare:
+                    rarityGem.color = Color.blue;
+                    if (rarityParticles != null)
+                        rarityParticles.Play();
+                    break;
+                case Card.Rarity.Epic:
+                    rarityGem.color = new Color(0.5f, 0, 0.5f); // Purple
+                    if (rarityParticles != null)
+                    {
+                        var main = rarityParticles.main;
+                        main.startColor = new Color(0.5f, 0, 0.5f);
+                        rarityParticles.Play();
+                    }
+                    break;
+                case Card.Rarity.Legendary:
+                    rarityGem.color = new Color(1f, 0.5f, 0); // Orange
+                    if (rarityParticles != null)
+                    {
+                        var main = rarityParticles.main;
+                        main.startColor = new Color(1f, 0.5f, 0);
+                        rarityParticles.Play();
+                    }
+                    break;
+            }
+        }
+
+        // Set card type icon
+        if (cardTypeIcon != null)
+        {
+            switch (card.type)
+            {
+                case Card.CardType.Creature:
+                    cardTypeIcon.sprite = CardGameManager.Instance.creatureIcon;
+                    break;
+                case Card.CardType.Spell:
+                    cardTypeIcon.sprite = CardGameManager.Instance.spellIcon;
+                    break;
+                    // Add other types as needed
+            }
+        }
+
+        // Set mana crystal color based on cost
+        if (manaCrystal != null)
+        {
+            if (card.manaCost <= 3)
+                manaCrystal.color = Color.green;
+            else if (card.manaCost <= 6)
+                manaCrystal.color = Color.blue;
+            else
+                manaCrystal.color = new Color(0.5f, 0, 0.5f); // Purple for high cost
+        }
     }
 
     public void UpdateCardVisual()
@@ -161,7 +258,7 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         return isInside;
     }
 
-    private bool IsPlayable()
+    public bool IsPlayable()
     {
         // Check if it's our turn
         if (!CardGameManager.Instance.IsPlayerTurn(_owner))
@@ -178,7 +275,7 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         return true;
     }
 
-    private bool CanAttack()
+    public bool CanAttack()
     {
         // Must be a creature on the field
         if (!_isOnField || _card.type != Card.CardType.Creature)
@@ -373,8 +470,29 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        // Double click to play card
-        if (eventData.clickCount == 2 && IsPlayable())
+        // If it's a creature on the field that can attack
+        if (CanAttack())
+        {
+            // If not already selected, select this card
+            if (!_isSelected)
+            {
+                CardGameManager.Instance.SelectAttacker(this);
+            }
+            else
+            {
+                // If already selected, deselect
+                CardGameManager.Instance.DeselectAttacker(this);
+            }
+        }
+        // If it's an enemy creature that can be targeted
+        else if (_isOnField && _card.type == Card.CardType.Creature &&
+                 _owner != CardGameManager.Instance.GetCurrentPlayer())
+        {
+            // Try to set as target for currently selected card
+            CardGameManager.Instance.SetAttackTarget(this);
+        }
+        // Double click to play card from hand
+        else if (eventData.clickCount == 2 && IsPlayable())
         {
             bool success = _owner.PlayCard(_card);
 
@@ -385,6 +503,70 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         }
     }
     #endregion
+
+    public void SetSelected(bool selected)
+    {
+        _isSelected = selected;
+        if (selectionHighlight != null)
+            selectionHighlight.SetActive(selected);
+
+        // Play selection sound/effect
+        if (selected)
+        {
+            AudioSource.PlayClipAtPoint(CardGameManager.Instance.cardSelectSound, transform.position);
+            transform.DOPunchScale(Vector3.one * 0.2f, 0.2f, 5, 0.5f);
+        }
+    }
+
+    public void SetTargeted(bool targeted)
+    {
+        if (targetedHighlight != null)
+            targetedHighlight.SetActive(targeted);
+
+        // Play targeted sound/effect
+        if (targeted)
+        {
+            AudioSource.PlayClipAtPoint(CardGameManager.Instance.cardTargetSound, transform.position);
+            transform.DOPunchScale(Vector3.one * 0.2f, 0.2f, 5, 0.5f);
+        }
+    }
+
+    public void SetAttackTarget(Card targetCard)
+    {
+        _targetCard = targetCard;
+
+        // Update attack line
+        if (_targetCard != null && _targetCard.visualInstance != null)
+        {
+            _attackLine.enabled = true;
+            UpdateAttackLine();
+        }
+        else
+        {
+            _attackLine.enabled = false;
+        }
+    }
+
+    private void UpdateAttackLine()
+    {
+        if (_targetCard != null && _targetCard.visualInstance != null && _attackLine.enabled)
+        {
+            Vector3 startPos = transform.position;
+            Vector3 endPos = _targetCard.visualInstance.transform.position;
+
+            // Adjust line to start/end at card edges rather than centers
+            Vector3 direction = (endPos - startPos).normalized;
+            float cardRadius = GetComponent<RectTransform>().rect.width * 0.4f;
+
+            startPos += direction * cardRadius;
+            endPos -= direction * cardRadius;
+
+            _attackLine.SetPosition(0, startPos);
+            _attackLine.SetPosition(1, endPos);
+        }
+    }
+
+
 
     public void PlayAICardAnimation()
     {
@@ -403,13 +585,14 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         // Simple animation for AI playing a card
         transform.DOScale(_originalScale * 1.2f, 0.2f)
             .SetEase(Ease.OutQuad)
-            .OnComplete(() => {
+            .OnComplete(() =>
+            {
                 transform.DOScale(_originalScale, 0.2f)
                     .SetEase(Ease.InQuad);
             });
     }
 
-    private void PlayCardAnimation()
+    public void PlayCardAnimation()
     {
         // Play particles
         if (playParticles != null)
@@ -439,10 +622,12 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
             // For spells, animate and destroy
             transform.DOScale(_originalScale * 1.5f, playAnimDuration * 0.5f)
                 .SetEase(Ease.OutQuad)
-                .OnComplete(() => {
+                .OnComplete(() =>
+                {
                     transform.DOScale(Vector3.zero, playAnimDuration * 0.5f)
                         .SetEase(Ease.InQuad)
-                        .OnComplete(() => {
+                        .OnComplete(() =>
+                        {
                             Destroy(gameObject);
                         });
                 });
