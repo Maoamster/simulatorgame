@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cardName: Flame Imp
   cardDescription: Small but fierce, it burns friend and foe alike.
-  cardArtwork: {fileID: 10901, guid: 0000000000000000f000000000000000, type: 0}
+  cardArtwork: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
   manaCost: 1
   type: 0
   attack: 3
