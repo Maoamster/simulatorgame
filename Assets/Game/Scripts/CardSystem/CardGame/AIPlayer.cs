@@ -195,6 +195,18 @@ public class AIPlayer : Player
         return targets;
     }
 
+    public void PlayCardWithAnimation(Card card, List<Card> targets = null)
+    {
+        // Play the card
+        bool success = PlayCard(card, targets);
+
+        if (success && card.visualInstance != null)
+        {
+            // Add some visual effect to show AI is playing a card
+            card.visualInstance.GetComponent<CardVisual>().PlayAICardAnimation();
+        }
+    }
+
     private float GetTargetPriority(Card card)
     {
         float priority = 0;

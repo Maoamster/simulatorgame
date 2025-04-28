@@ -38,22 +38,13 @@ public class CreatureCard : Card
 
     public void TakeDamage(int amount)
     {
-        // Handle divine shield
-        if (isDivine)
+        health -= amount;
+        Debug.Log($"{cardName} takes {amount} damage, health now {health}");
+
+        // Update visual if available
+        if (visualInstance != null)
         {
-            isDivine = false;
-            return;
-        }
-
-        currentHealth -= amount;
-
-        // Call damage event
-        OnDamaged(amount, null);
-
-        // Check for death
-        if (currentHealth <= 0)
-        {
-            OnDeath();
+            visualInstance.UpdateCardVisual();
         }
     }
 

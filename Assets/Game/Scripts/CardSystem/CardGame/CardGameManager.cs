@@ -131,6 +131,13 @@ public class CardGameManager : MonoBehaviour
         // Update UI
         turnText.text = $"Turn {_currentTurn}: {currentPlayer.playerName}'s Turn";
         endTurnButton.interactable = true;
+
+        // If it's AI's turn, trigger AI logic
+        if (currentPlayer is AIPlayer aiPlayer)
+        {
+            Debug.Log("Starting AI turn");
+            aiPlayer.StartAITurn();
+        }
     }
 
     private void ProcessDelayedEffects()
@@ -274,11 +281,37 @@ public class CardGameManager : MonoBehaviour
     public bool IsOverPlayArea(Vector2 screenPosition)
     {
         // Convert screen position to local position in play area
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            playArea, screenPosition, null, out Vector2 localPoint);
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            playArea, screenPosition, Camera.main, out Vector2 localPoint))
+        {
+            // Debug.Log("Point in play area: " + localPoint);
+            return playArea.rect.Contains(localPoint);
+        }
+        return false;
+    }
 
-        // Check if point is inside play area
-        return playArea.rect.Contains(localPoint);
+
+    public bool IsOverPlayerField(Vector2 screenPosition, Player player)
+    {
+        // Convert screen position to world position
+        Vector3 worldPos = Camera.main.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, 0));
+
+        // Check if there's a collider at this position
+        Collider2D hitCollider = Physics2D.OverlapPoint(new Vector2(worldPos.x, worldPos.y));
+
+        // Debug information
+        Debug.Log($"Screen pos: {screenPosition}, World pos: {worldPos}");
+        if (hitCollider != null)
+        {
+            Debug.Log($"Hit collider: {hitCollider.gameObject.name}");
+        }
+        else
+        {
+            Debug.Log("No collider hit");
+        }
+
+        // Check if the hit collider is the player field
+        return hitCollider != null && hitCollider.transform == player.fieldArea;
     }
 
     public void ShowCardPreview(Card card)
@@ -372,9 +405,13 @@ public class CardGameManager : MonoBehaviour
     {
         if (attacker is CreatureCard attackerCreature && defender is CreatureCard defenderCreature)
         {
+            Debug.Log($"{attackerCreature.cardName} (ATK:{attackerCreature.attack}) attacks {defenderCreature.cardName} (ATK:{defenderCreature.attack})");
+
             // Apply damage to both cards
             defenderCreature.TakeDamage(attackerCreature.attack);
             attackerCreature.TakeDamage(defenderCreature.attack);
+
+            Debug.Log($"After combat: {attackerCreature.cardName} (HP:{attackerCreature.health}), {defenderCreature.cardName} (HP:{defenderCreature.health})");
 
             // Mark attacker as having attacked this turn
             attackerCreature.canAttackThisTurn = false;
@@ -385,12 +422,32 @@ public class CardGameManager : MonoBehaviour
                 AudioSource.PlayClipAtPoint(attacker.attackSound, attacker.visualInstance.transform.position);
             }
 
+            // Check if cards died
+            CheckCardDeath(defenderCreature);
+            CheckCardDeath(attackerCreature);
+
             // Update visuals
             if (attacker.visualInstance != null)
                 attacker.visualInstance.UpdateCardVisual();
 
             if (defender.visualInstance != null)
                 defender.visualInstance.UpdateCardVisual();
+        }
+    }
+
+    private void CheckCardDeath(CreatureCard card)
+    {
+        if (card.health <= 0)
+        {
+            Debug.Log($"{card.cardName} has died!");
+
+            // Find the owner
+            Player owner = GetCardOwner(card);
+            if (owner != null)
+            {
+                // Remove from field
+                owner.RemoveCardFromField(card);
+            }
         }
     }
 

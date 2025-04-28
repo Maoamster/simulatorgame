@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 public class Player : MonoBehaviour
 {
@@ -187,13 +188,30 @@ public class Player : MonoBehaviour
         {
             _field.Add(card);
 
-            // Create card visual on field
-            CreateCardVisual(card, fieldArea);
+            // If the card already has a visual instance, just move it to the field
+            if (card.visualInstance != null)
+            {
+                // Set parent to field area
+                card.visualInstance.transform.SetParent(fieldArea);
+
+                // Let the layout group handle positioning
+                card.visualInstance.SetFieldCard();
+
+                // Force layout rebuild
+                LayoutRebuilder.ForceRebuildLayoutImmediate(fieldArea.GetComponent<RectTransform>());
+            }
+            else
+            {
+                // Create new visual if needed
+                CreateCardVisual(card, fieldArea);
+            }
         }
         else
         {
             // For non-creature cards, add to graveyard after playing
             _graveyard.Add(card);
+
+            // If it has a visual, we'll let the animation handle destruction
         }
 
         // Notify the game manager that a card was played

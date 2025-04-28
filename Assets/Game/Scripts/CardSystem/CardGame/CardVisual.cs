@@ -16,6 +16,7 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     public TextMeshProUGUI healthText;
     public GameObject creatureStatsPanel;
 
+
     [Header("Visual Effects")]
     public GameObject glowEffect;
     public ParticleSystem playParticles;
@@ -27,6 +28,10 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     public float playAnimDuration = 0.5f;
 
     // Private variables
+    private GameObject _fieldHighlight;
+    private Color _normalFieldColor;
+    private RectTransform _playerFieldRect; 
+    private Transform _originalParent;
     private Card _card;
     private Player _owner;
     private bool _isDragging = false;
@@ -62,10 +67,26 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         return _card;
     }
 
+    private void CreateFieldHighlight()
+    {
+        if (_fieldHighlight == null && _owner != null && _owner.fieldArea != null)
+        {
+            // Get the field's image component
+            Image fieldImage = _owner.fieldArea.GetComponent<Image>();
+            if (fieldImage != null)
+            {
+                _normalFieldColor = fieldImage.color;
+            }
+        }
+    }
+
     public void SetupCard(Card card, Player owner)
     {
         _card = card;
         _owner = owner;
+
+        // Get reference to player field
+        _playerFieldRect = owner.fieldArea.GetComponent<RectTransform>();
 
         // Set the reference back to this visual instance
         card.visualInstance = this;
@@ -108,6 +129,36 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     public void SetFieldCard()
     {
         _isOnField = true;
+    }
+
+    private bool IsPointOverField(Vector2 screenPoint)
+    {
+        // Convert screen point to viewport point
+        Vector2 viewportPoint = Camera.main.ScreenToViewportPoint(screenPoint);
+
+        // Convert field rect corners to viewport points
+        Vector3[] corners = new Vector3[4];
+        _playerFieldRect.GetWorldCorners(corners);
+
+        for (int i = 0; i < 4; i++)
+        {
+            corners[i] = Camera.main.WorldToViewportPoint(corners[i]);
+        }
+
+        // Check if viewport point is inside the field rect
+        float minX = Mathf.Min(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
+        float maxX = Mathf.Max(corners[0].x, corners[1].x, corners[2].x, corners[3].x);
+        float minY = Mathf.Min(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
+        float maxY = Mathf.Max(corners[0].y, corners[1].y, corners[2].y, corners[3].y);
+
+        bool isInside = viewportPoint.x >= minX && viewportPoint.x <= maxX &&
+                        viewportPoint.y >= minY && viewportPoint.y <= maxY;
+
+        Debug.Log($"Screen point: {screenPoint}, Viewport: {viewportPoint}");
+        Debug.Log($"Field bounds: ({minX},{minY}) to ({maxX},{maxY})");
+        Debug.Log($"Is inside field: {isInside}");
+
+        return isInside;
     }
 
     private bool IsPlayable()
@@ -181,6 +232,19 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         _isDragging = true;
         _originalPosition = transform.position;
 
+        // Temporarily remove from layout group influence
+        if (!_isOnField)
+        {
+            // Save original parent
+            Transform originalParent = transform.parent;
+
+            // Move to canvas directly to prevent layout group influence
+            transform.SetParent(GetComponentInParent<Canvas>().transform);
+
+            // Store original parent to return to if needed
+            _originalParent = originalParent;
+        }
+
         // Scale card
         transform.DOScale(_originalScale * dragScale, hoverDuration);
 
@@ -206,10 +270,36 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         Vector3 screenPoint = new Vector3(eventData.position.x, eventData.position.y, 10);
         Vector3 worldPosition = Camera.main.ScreenToWorldPoint(screenPoint);
         transform.position = worldPosition;
+
+        // Highlight field if we're over it
+        if (IsPlayable())
+        {
+            Image fieldImage = _owner.fieldArea.GetComponent<Image>();
+            if (fieldImage != null)
+            {
+                if (IsPointOverField(eventData.position))
+                {
+                    // Highlight field
+                    fieldImage.color = new Color(0.5f, 1f, 0.5f, 0.5f); // Green highlight
+                }
+                else
+                {
+                    // Reset field color
+                    fieldImage.color = _normalFieldColor;
+                }
+            }
+        }
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        // Reset field highlight
+        Image fieldImage = _owner.fieldArea.GetComponent<Image>();
+        if (fieldImage != null)
+        {
+            fieldImage.color = _normalFieldColor;
+        }
+
         if (!_isDragging)
             return;
 
@@ -221,6 +311,7 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         // Check if card was dropped on a valid target
         if (CanAttack())
         {
+            // Attack logic (unchanged)
             Card target = CardGameManager.Instance.GetTargetUnderMouse();
             if (target != null)
             {
@@ -237,9 +328,11 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         }
         else if (IsPlayable())
         {
-            // Check if card was dropped on play area
-            if (CardGameManager.Instance.IsOverPlayArea(eventData.position))
+            // Use our direct method to check if over field
+            if (IsPointOverField(eventData.position))
             {
+                Debug.Log("Attempting to play card: " + _card.cardName);
+
                 // Play the card
                 bool success = _owner.PlayCard(_card);
 
@@ -250,17 +343,31 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
                 }
                 else
                 {
-                    // Return to original position
-                    transform.DOMove(_originalPosition, hoverDuration).SetEase(Ease.OutQuad);
-                    transform.DOScale(_originalScale, hoverDuration).SetEase(Ease.OutQuad);
+                    // Return to hand
+                    ReturnCardToHand();
                 }
             }
             else
             {
-                // Return to original position
-                transform.DOMove(_originalPosition, hoverDuration).SetEase(Ease.OutQuad);
-                transform.DOScale(_originalScale, hoverDuration).SetEase(Ease.OutQuad);
+                Debug.Log("Not over field, returning to hand");
+                // Return to hand
+                ReturnCardToHand();
             }
+        }
+    }
+
+    private void ReturnCardToHand()
+    {
+        // Return to original parent (hand area)
+        transform.SetParent(_originalParent);
+
+        // Reset scale
+        transform.DOScale(_originalScale, hoverDuration).SetEase(Ease.OutQuad);
+
+        // Force layout refresh if parent has a layout group
+        if (_originalParent.GetComponent<LayoutGroup>() != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_originalParent.GetComponent<RectTransform>());
         }
     }
 
@@ -279,6 +386,29 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     }
     #endregion
 
+    public void PlayAICardAnimation()
+    {
+        // Play particles
+        if (playParticles != null)
+        {
+            playParticles.Play();
+        }
+
+        // Play sound
+        if (_card.playSound != null)
+        {
+            AudioSource.PlayClipAtPoint(_card.playSound, Camera.main.transform.position);
+        }
+
+        // Simple animation for AI playing a card
+        transform.DOScale(_originalScale * 1.2f, 0.2f)
+            .SetEase(Ease.OutQuad)
+            .OnComplete(() => {
+                transform.DOScale(_originalScale, 0.2f)
+                    .SetEase(Ease.InQuad);
+            });
+    }
+
     private void PlayCardAnimation()
     {
         // Play particles
@@ -296,12 +426,13 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         // Animate to field position
         if (_card.type == Card.CardType.Creature)
         {
-            // Move to field
-            transform.DOMove(_owner.fieldArea.position, playAnimDuration)
-                .SetEase(Ease.OutBack);
-
             // Set as field card
             SetFieldCard();
+
+            // Reset scale
+            transform.DOScale(_originalScale, playAnimDuration).SetEase(Ease.OutBack);
+
+            // No need to set position - let the layout group handle it
         }
         else
         {
