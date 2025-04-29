@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.UI;
 using DG.Tweening;
+using UnityEngine.EventSystems;
 
 public class Player : MonoBehaviour
 {
@@ -223,8 +224,41 @@ public class Player : MonoBehaviour
             // Add new card
             _field.Insert(index, newCard);
 
-            // Create visual
-            CreateCardVisual(newCard, fieldArea);
+            // Create visual with proper initialization
+            GameObject cardObj = Instantiate(cardPrefab, fieldArea);
+            CardVisual cardVisual = cardObj.GetComponent<CardVisual>();
+
+            if (cardVisual != null)
+            {
+                // Ensure creature card stats are initialized
+                if (newCard is CreatureCard creatureCard && creatureCard.currentHealth <= 0)
+                {
+                    creatureCard.InitializeStats();
+                }
+
+                cardVisual.SetupCard(newCard, this);
+                cardVisual.SetFieldCard();
+
+                // Make sure it's properly initialized for targeting
+                if (newCard is CreatureCard)
+                {
+                    // Make sure it can be targeted
+                    cardVisual.gameObject.AddComponent<BoxCollider2D>();
+                }
+
+                // Make sure event triggers are properly set up
+                SetupCardEventTriggers(cardVisual.gameObject);
+
+                // Position at the correct slot if needed
+                if (fieldArea.childCount > index)
+                {
+                    Transform slotTransform = fieldArea.GetChild(index);
+                    if (slotTransform != null)
+                    {
+                        cardObj.transform.position = slotTransform.position;
+                    }
+                }
+            }
         }
     }
 
@@ -502,8 +536,89 @@ public class Player : MonoBehaviour
             }
 
             cardVisual.SetupCard(card, this);
+
+            // If this is being created in the field, set it as a field card
+            if (parent == fieldArea)
+            {
+                cardVisual.SetFieldCard();
+
+                // Make sure it's properly initialized for targeting
+                if (card is CreatureCard)
+                {
+                    // Reset any targeting flags
+                    cardVisual.ClearAttackLine();
+
+                    // Make sure it can be targeted
+                    cardVisual.gameObject.AddComponent<BoxCollider2D>();
+                }
+            }
+
+            // Make sure event triggers are properly set up
+            SetupCardEventTriggers(cardVisual.gameObject);
         }
     }
+
+    private void SetupCardEventTriggers(GameObject cardObj)
+    {
+        // Make sure the card has an EventTrigger component
+        EventTrigger eventTrigger = cardObj.GetComponent<EventTrigger>();
+        if (eventTrigger == null)
+        {
+            eventTrigger = cardObj.AddComponent<EventTrigger>();
+        }
+
+        // Clear existing triggers to avoid duplicates
+        eventTrigger.triggers.Clear();
+
+        // Add pointer enter event
+        EventTrigger.Entry enterEntry = new EventTrigger.Entry();
+        enterEntry.eventID = EventTriggerType.PointerEnter;
+        enterEntry.callback.AddListener((data) => {
+            cardObj.GetComponent<CardVisual>().OnPointerEnter((PointerEventData)data);
+        });
+        eventTrigger.triggers.Add(enterEntry);
+
+        // Add pointer exit event
+        EventTrigger.Entry exitEntry = new EventTrigger.Entry();
+        exitEntry.eventID = EventTriggerType.PointerExit;
+        exitEntry.callback.AddListener((data) => {
+            cardObj.GetComponent<CardVisual>().OnPointerExit((PointerEventData)data);
+        });
+        eventTrigger.triggers.Add(exitEntry);
+
+        // Add pointer click event
+        EventTrigger.Entry clickEntry = new EventTrigger.Entry();
+        clickEntry.eventID = EventTriggerType.PointerClick;
+        clickEntry.callback.AddListener((data) => {
+            cardObj.GetComponent<CardVisual>().OnPointerClick((PointerEventData)data);
+        });
+        eventTrigger.triggers.Add(clickEntry);
+
+        // Add begin drag event
+        EventTrigger.Entry beginDragEntry = new EventTrigger.Entry();
+        beginDragEntry.eventID = EventTriggerType.BeginDrag;
+        beginDragEntry.callback.AddListener((data) => {
+            cardObj.GetComponent<CardVisual>().OnBeginDrag((PointerEventData)data);
+        });
+        eventTrigger.triggers.Add(beginDragEntry);
+
+        // Add drag event
+        EventTrigger.Entry dragEntry = new EventTrigger.Entry();
+        dragEntry.eventID = EventTriggerType.Drag;
+        dragEntry.callback.AddListener((data) => {
+            cardObj.GetComponent<CardVisual>().OnDrag((PointerEventData)data);
+        });
+        eventTrigger.triggers.Add(dragEntry);
+
+        // Add end drag event
+        EventTrigger.Entry endDragEntry = new EventTrigger.Entry();
+        endDragEntry.eventID = EventTriggerType.EndDrag;
+        endDragEntry.callback.AddListener((data) => {
+            cardObj.GetComponent<CardVisual>().OnEndDrag((PointerEventData)data);
+        });
+        eventTrigger.triggers.Add(endDragEntry);
+    }
+
 
     public List<Card> GetHandCards()
     {

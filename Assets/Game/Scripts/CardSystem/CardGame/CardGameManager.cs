@@ -167,14 +167,21 @@ public class CardGameManager : MonoBehaviour
     public void SetAttackTarget(CardVisual targetCardVisual)
     {
         if (_selectedAttacker == null)
+        {
+            Debug.LogWarning("Cannot set attack target: No attacker selected");
             return;
+        }
 
         Card attackerCard = _selectedAttacker.GetCard();
         Card targetCard = targetCardVisual.GetCard();
 
+        Debug.Log($"Attempting to set {targetCard.cardName} as target for {attackerCard.cardName}");
+
         // Check if target is valid
         if (IsValidAttackTarget(attackerCard, targetCard))
         {
+            Debug.Log($"Target is valid, setting up attack");
+
             // Remove any existing attack for this attacker
             RemovePendingAttacksForCard(attackerCard);
 
@@ -195,6 +202,10 @@ public class CardGameManager : MonoBehaviour
 
             Debug.Log($"Set attack target: {targetCard.cardName}");
         }
+        else
+        {
+            Debug.LogWarning($"Invalid target: {targetCard.cardName} for attacker: {attackerCard.cardName}");
+        }
     }
 
     public bool HasSelectedAttacker()
@@ -204,31 +215,51 @@ public class CardGameManager : MonoBehaviour
 
     private bool IsValidAttackTarget(Card attacker, Card defender)
     {
+        Debug.Log($"Validating attack target: {defender.cardName} for attacker: {attacker.cardName}");
+
         // Check if defender is an enemy card
         Player attackerOwner = GetCardOwner(attacker);
         Player defenderOwner = GetCardOwner(defender);
 
-        if (attackerOwner == defenderOwner)
-            return false;
-
-        // Check if defender is on the field
-        if (!defenderOwner.GetFieldCards().Contains(defender))
-            return false;
-
-        // Check if defender has taunt
-        if (defenderOwner.HasTauntCreatures())
+        if (attackerOwner == null)
         {
-            // If defender doesn't have taunt, check if there are other taunt creatures
-            if (!defender.hasTaunt)
-            {
-                foreach (Card card in defenderOwner.GetFieldCards())
-                {
-                    if (card != null && card.hasTaunt)
-                        return false; // Can't attack non-taunt when taunt exists
-                }
-            }
+            Debug.LogWarning($"Cannot find owner for attacker: {attacker.cardName}");
+            return false;
         }
 
+        if (defenderOwner == null)
+        {
+            Debug.LogWarning($"Cannot find owner for defender: {defender.cardName}");
+            return false;
+        }
+
+        if (attackerOwner == defenderOwner)
+        {
+            Debug.LogWarning("Attacker and defender have the same owner");
+            return false;
+        }
+
+        // Check if defender is on the field
+        List<Card> defenderFieldCards = defenderOwner.GetFieldCards();
+        bool defenderOnField = defenderFieldCards.Contains(defender);
+
+        if (!defenderOnField)
+        {
+            Debug.LogWarning($"Defender {defender.cardName} is not on the field");
+            return false;
+        }
+
+        // Check if defender has taunt
+        bool defenderHasTaunt = defender.hasTaunt;
+        bool enemyHasTaunt = defenderOwner.HasTauntCreatures();
+
+        if (enemyHasTaunt && !defenderHasTaunt)
+        {
+            Debug.LogWarning("Enemy has taunt creatures, but target is not a taunt");
+            return false;
+        }
+
+        Debug.Log($"Target is valid: {defender.cardName}");
         return true;
     }
 
@@ -622,7 +653,7 @@ public class CardGameManager : MonoBehaviour
         // Continue with normal end turn logic
         Player currentPlayer = isPlayerOneTurn ? playerOne : playerTwo;
         OnTurnEnd?.Invoke(currentPlayer);
-
+        
         // Switch turns
         isPlayerOneTurn = !isPlayerOneTurn;
 

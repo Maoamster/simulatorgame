@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
 using DG.Tweening;
+using System.Collections;
 
 public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
 {
@@ -63,6 +64,20 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
     private void Awake()
     {
+        // Initialize components
+        _rectTransform = GetComponent<RectTransform>();
+        _canvas = GetComponentInParent<Canvas>();
+        _canvasGroup = GetComponent<CanvasGroup>();
+
+        if (_canvasGroup == null)
+            _canvasGroup = gameObject.AddComponent<CanvasGroup>();
+
+        _originalScale = transform.localScale;
+
+        // Initialize _normalFieldColor
+        _normalFieldColor = new Color(1f, 1f, 1f, 1f); // Default white
+
+        // Initialize attack line
         if (_attackLine == null)
         {
             _attackLine = gameObject.AddComponent<LineRenderer>();
@@ -93,17 +108,9 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
             _attackLine.enabled = false;
         }
 
+        // Initialize UI elements
         if (selectionHighlight != null)
             selectionHighlight.SetActive(false);
-
-        _rectTransform = GetComponent<RectTransform>();
-        _canvas = GetComponentInParent<Canvas>();
-        _canvasGroup = GetComponent<CanvasGroup>();
-
-        if (_canvasGroup == null)
-            _canvasGroup = gameObject.AddComponent<CanvasGroup>();
-
-        _originalScale = transform.localScale;
 
         if (glowEffect != null)
             glowEffect.SetActive(false);
@@ -154,6 +161,12 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
     {
         _card = card;
         _owner = owner;
+
+        // Initialize _playerFieldRect
+        if (_owner != null && _owner.fieldArea != null)
+        {
+            _playerFieldRect = _owner.fieldArea.GetComponent<RectTransform>();
+        }
 
         // Set the reference back to this visual instance
         card.visualInstance = this;
@@ -278,6 +291,23 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
     private bool IsPointOverField(Vector2 screenPoint)
     {
+        // Check if _playerFieldRect is initialized
+        if (_playerFieldRect == null)
+        {
+            // Try to initialize it
+            if (_owner != null && _owner.fieldArea != null)
+            {
+                _playerFieldRect = _owner.fieldArea.GetComponent<RectTransform>();
+            }
+
+            // If still null, we can't check
+            if (_playerFieldRect == null)
+            {
+                Debug.LogWarning("Cannot check if point is over field: _playerFieldRect is null");
+                return false;
+            }
+        }
+
         // Convert screen point to viewport point
         Vector2 viewportPoint = Camera.main.ScreenToViewportPoint(screenPoint);
 
@@ -298,10 +328,6 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
         bool isInside = viewportPoint.x >= minX && viewportPoint.x <= maxX &&
                         viewportPoint.y >= minY && viewportPoint.y <= maxY;
-
-        Debug.Log($"Screen point: {screenPoint}, Viewport: {viewportPoint}");
-        Debug.Log($"Field bounds: ({minX},{minY}) to ({maxX},{maxY})");
-        Debug.Log($"Is inside field: {isInside}");
 
         return isInside;
     }
@@ -334,12 +360,16 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
             return false;
 
         // Check if creature can attack this turn
-        if (_card is CreatureCard creatureCard && !creatureCard.canAttackThisTurn)
-            return false;
+        if (_card is CreatureCard creatureCard)
+        {
+            // If the card has already attacked this turn, it can't attack again
+            if (creatureCard.hasAttackedThisTurn)
+                return false;
 
-        // Check if card has already attacked
-        if (_card is CreatureCard creature && creature.hasAttackedThisTurn)
-            return false;
+            // If the card can't attack this turn (e.g., summoning sickness), it can't attack
+            if (!creatureCard.canAttackThisTurn)
+                return false;
+        }
 
         return true;
     }
@@ -419,7 +449,17 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
         if (!_isDragging)
         {
-            transform.DOScale(_originalScale * hoverScale, hoverDuration).SetEase(Ease.OutQuad);
+            // Call the hover effect if it exists
+            CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+            if (hoverEffect != null)
+            {
+                hoverEffect.OnCardHoverEnter();
+            }
+            else
+            {
+                // Fall back to the original scale animation if no hover effect
+                transform.DOScale(_originalScale * hoverScale, hoverDuration).SetEase(Ease.OutQuad);
+            }
 
             if (glowEffect != null && (IsPlayable() || CanAttack()))
                 glowEffect.SetActive(true);
@@ -441,7 +481,17 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
         if (!_isDragging)
         {
-            transform.DOScale(_originalScale, hoverDuration).SetEase(Ease.OutQuad);
+            // Call the hover effect if it exists
+            CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+            if (hoverEffect != null)
+            {
+                hoverEffect.OnCardHoverExit();
+            }
+            else
+            {
+                // Fall back to the original scale animation if no hover effect
+                transform.DOScale(_originalScale, hoverDuration).SetEase(Ease.OutQuad);
+            }
 
             if (glowEffect != null)
                 glowEffect.SetActive(false);
@@ -451,6 +501,8 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         }
     }
 
+
+    // In the OnBeginDrag method
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (!IsPlayable() && !CanAttack())
@@ -458,6 +510,13 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
         _isDragging = true;
         _originalPosition = transform.position;
+
+        // Notify the hover effect
+        CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+        if (hoverEffect != null)
+        {
+            hoverEffect.OnBeginDrag();
+        }
 
         // Temporarily remove from layout group influence
         if (!_isOnField)
@@ -498,13 +557,27 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         Vector3 worldPosition = Camera.main.ScreenToWorldPoint(screenPoint);
         transform.position = worldPosition;
 
-        // Highlight field if we're over it
-        if (IsPlayable())
+        // Highlight field if we're over it and we have a valid field rect
+        if (IsPlayable() && _owner != null && _owner.fieldArea != null)
         {
             Image fieldImage = _owner.fieldArea.GetComponent<Image>();
             if (fieldImage != null)
             {
-                if (IsPointOverField(eventData.position))
+                // Initialize _normalFieldColor if needed
+                if (_normalFieldColor.a == 0) // Check if color is uninitialized
+                {
+                    _normalFieldColor = fieldImage.color;
+                }
+
+                bool isOverField = false;
+
+                // Only check if point is over field if we have a valid _playerFieldRect
+                if (_playerFieldRect != null)
+                {
+                    isOverField = IsPointOverField(eventData.position);
+                }
+
+                if (isOverField)
                 {
                     // Highlight field
                     fieldImage.color = new Color(0.5f, 1f, 0.5f, 0.5f); // Green highlight
@@ -528,6 +601,8 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         // Reset transparency
         _canvasGroup.alpha = 1f;
 
+        bool returnToHand = true;
+
         // Check if card was dropped on a valid target
         if (CanAttack())
         {
@@ -540,11 +615,7 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
                 {
                     // Attack player directly
                     CardGameManager.Instance.AttackPlayer(_card, targetPlayer);
-                }
-                else
-                {
-                    // Return to original position
-                    transform.DOMove(_originalPosition, hoverDuration).SetEase(Ease.OutQuad);
+                    returnToHand = false;
                 }
             }
             else
@@ -555,11 +626,7 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
                 {
                     // Attack target
                     CardGameManager.Instance.AttackCard(_card, target);
-                }
-                else
-                {
-                    // Return to original position
-                    transform.DOMove(_originalPosition, hoverDuration).SetEase(Ease.OutQuad);
+                    returnToHand = false;
                 }
             }
 
@@ -578,30 +645,62 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
                 {
                     // Play animation
                     PlayCardAnimation();
+                    returnToHand = false;
                 }
-                else
-                {
-                    // Return to original position
-                    ReturnToHand();
-                }
-            }
-            else
-            {
-                // Return to original position
-                ReturnToHand();
             }
         }
-        else
+
+        // Notify the hover effect
+        CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+        if (hoverEffect != null)
         {
-            // Return to original position
+            hoverEffect.OnEndDrag(returnToHand);
+        }
+
+        if (returnToHand)
+        {
+            // Return to hand
             ReturnToHand();
         }
     }
 
     private void ReturnToHand()
     {
-        transform.DOMove(_originalPosition, hoverDuration).SetEase(Ease.OutQuad);
+        // Return to original parent (hand area)
+        if (_originalParent != null)
+        {
+            transform.SetParent(_originalParent);
+        }
+
+        // Reset scale
         transform.DOScale(_originalScale, hoverDuration).SetEase(Ease.OutQuad);
+
+        // Force layout refresh if parent has a layout group
+        if (_originalParent != null && _originalParent.GetComponent<LayoutGroup>() != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_originalParent.GetComponent<RectTransform>());
+        }
+
+        // Update the hover effect's start position after layout rebuild
+        CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+        if (hoverEffect != null)
+        {
+            // Wait a frame for layout to complete
+            StartCoroutine(UpdateHoverEffectStartPosition());
+        }
+    }
+
+    private IEnumerator UpdateHoverEffectStartPosition()
+    {
+        // Wait for end of frame to ensure layout is complete
+        yield return new WaitForEndOfFrame();
+
+        // Update the hover effect's start position
+        CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+        if (hoverEffect != null)
+        {
+            hoverEffect.UpdateStartPosition(transform.localPosition);
+        }
     }
 
     private void ReturnCardToHand()
@@ -622,45 +721,45 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        // Prevent interaction with opponent cards except as targets
-        if (_isOpponentCard)
+        Debug.Log($"Card clicked: {_card.cardName}, IsOnField: {_isOnField}, Type: {_card.type}, CanAttack: {CanAttack()}, IsOpponentCard: {_isOpponentCard}");
+
+        // Check if we have a selected attacker first
+        if (CardGameManager.Instance.HasSelectedAttacker())
         {
-            // Only allow targeting opponent cards that are on the field
-            if (_isOnField && _card.type == Card.CardType.Creature)
+            // If this is an opponent card on the field, it can be targeted
+            if (_isOpponentCard && _isOnField && _card.type == Card.CardType.Creature)
             {
-                // Check if we have a selected attacker
-                if (CardGameManager.Instance.HasSelectedAttacker())
-                {
-                    CardGameManager.Instance.SetAttackTarget(this);
-                }
+                Debug.Log($"Targeting opponent card: {_card.cardName}");
+                CardGameManager.Instance.SetAttackTarget(this);
+                return;
             }
-            return;
+
+            // If this is our own selected attacker, deselect it
+            if (!_isOpponentCard && _isSelected)
+            {
+                Debug.Log($"Deselecting attacker: {_card.cardName}");
+                CardGameManager.Instance.DeselectAttacker(this);
+                return;
+            }
         }
+
+        // If no attacker is selected or we didn't handle targeting above:
+
+        // Prevent other interactions with opponent cards
+        if (_isOpponentCard)
+            return;
 
         // If it's a creature on the field that can attack
         if (CanAttack())
         {
-            // If not already selected, select this card
-            if (!_isSelected)
-            {
-                CardGameManager.Instance.SelectAttacker(this);
-            }
-            else
-            {
-                // If already selected, deselect
-                CardGameManager.Instance.DeselectAttacker(this);
-            }
-        }
-        // If it's an enemy creature that can be targeted
-        else if (_isOnField && _card.type == Card.CardType.Creature &&
-                 _owner != CardGameManager.Instance.GetCurrentPlayer())
-        {
-            // Try to set as target for currently selected card
-            CardGameManager.Instance.SetAttackTarget(this);
+            // Select this card as attacker
+            Debug.Log($"Selecting attacker: {_card.cardName}");
+            CardGameManager.Instance.SelectAttacker(this);
         }
         // Double click to play card from hand
         else if (eventData.clickCount == 2 && IsPlayable())
         {
+            Debug.Log($"Playing card: {_card.cardName}");
             bool success = _owner.PlayCard(_card);
             if (success)
             {
@@ -676,11 +775,20 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         if (selectionHighlight != null)
             selectionHighlight.SetActive(selected);
 
-        // Play selection sound/effect
-        if (selected)
+        // Call the selection effect if it exists
+        CardHoverEffect hoverEffect = GetComponent<CardHoverEffect>();
+        if (hoverEffect != null)
         {
-            AudioSource.PlayClipAtPoint(CardGameManager.Instance.cardSelectSound, transform.position);
-            transform.DOPunchScale(Vector3.one * 0.2f, 0.2f, 5, 0.5f);
+            hoverEffect.OnCardSelected(selected);
+        }
+        else
+        {
+            // Fall back to the original punch animation if no hover effect
+            if (selected)
+            {
+                AudioSource.PlayClipAtPoint(CardGameManager.Instance.cardSelectSound, transform.position);
+                transform.DOPunchScale(Vector3.one * 0.2f, 0.2f, 5, 0.5f);
+            }
         }
     }
 
@@ -699,6 +807,8 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
 
     public void SetAttackTarget(CardVisual targetCardVisual)
     {
+        Debug.Log($"Setting attack target: {targetCardVisual.GetCard().cardName} for {_card.cardName}");
+
         _targetCardVisual = targetCardVisual;
 
         // Update attack line
@@ -706,10 +816,12 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         {
             _attackLine.enabled = true;
             UpdateAttackLine();
+            Debug.Log("Attack line enabled");
         }
         else
         {
             _attackLine.enabled = false;
+            Debug.Log("Attack line disabled");
         }
     }
 
