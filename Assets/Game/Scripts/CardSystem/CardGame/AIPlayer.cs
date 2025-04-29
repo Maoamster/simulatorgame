@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using DG.Tweening;
+using static CardGameManager;
 
 public class AIPlayer : Player
 {
@@ -10,6 +12,11 @@ public class AIPlayer : Player
     public float playCardDelay = 0.5f;
 
     private CardGameManager _gameManager;
+    private class AttackPair
+    {
+        public Card attacker;
+        public Card defender;
+    }
 
     public override void Start()
     {
@@ -41,24 +48,29 @@ public class AIPlayer : Player
     private IEnumerator PlayCardsRoutine()
     {
         bool playedCard;
+        int attemptCount = 0; // Safety counter to prevent infinite loops
 
         do
         {
             playedCard = false;
+            attemptCount++;
 
             // Get playable cards sorted by priority
             List<Card> playableCards = GetPlayableCards();
+            Debug.Log($"AI has {playableCards.Count} playable cards");
 
-            if (playableCards.Count > 0)
+            if (playableCards.Count > 0 && attemptCount < 10) // Safety limit
             {
                 // Play highest priority card
                 Card cardToPlay = playableCards[0];
+                Debug.Log($"AI attempting to play {cardToPlay.cardName}");
 
                 // Get targets if needed
                 List<Card> targets = GetTargetsForCard(cardToPlay);
 
-                // Play the card
-                bool success = PlayCard(cardToPlay, targets);
+                // Play the card with animation
+                bool success = PlayCardWithAnimation(cardToPlay, targets);
+                Debug.Log($"AI play success: {success}");
 
                 if (success)
                 {
@@ -66,13 +78,137 @@ public class AIPlayer : Player
                     yield return new WaitForSeconds(playCardDelay);
                 }
             }
+            else
+            {
+                Debug.Log("AI has no playable cards or reached attempt limit");
+                break;
+            }
         }
         while (playedCard);
+    }
+
+    private IEnumerator ExecuteAIAttackWithAnimation(Card attacker, Card defender)
+    {
+        if (attacker is CreatureCard attackerCreature && defender is CreatureCard defenderCreature)
+        {
+            // Get visual instances
+            CardVisual attackerVisual = attacker.visualInstance;
+            CardVisual defenderVisual = defender.visualInstance;
+
+            if (attackerVisual != null && defenderVisual != null)
+            {
+                // Store original positions and scales
+                Vector3 attackerOrigPos = attackerVisual.transform.position;
+                Vector3 attackerOrigScale = attackerVisual.transform.localScale;
+                Vector3 defenderOrigScale = defenderVisual.transform.localScale;
+
+                // Ensure consistent scale during animation
+                attackerVisual.transform.localScale = Vector3.one;
+                defenderVisual.transform.localScale = Vector3.one;
+
+                // Animate attacker moving toward defender
+                yield return attackerVisual.transform.DOMove(
+                    Vector3.Lerp(attackerOrigPos, defenderVisual.transform.position, 0.7f),
+                    0.3f).SetEase(Ease.OutQuad).WaitForCompletion();
+
+                // Shake defender to show impact
+                defenderVisual.transform.DOShakePosition(0.2f, 10f, 10, 90, false, true);
+
+                // Apply damage
+                defenderCreature.TakeDamage(attackerCreature.currentAttack);
+                attackerCreature.TakeDamage(defenderCreature.currentAttack);
+
+                // Update visuals
+                attackerVisual.UpdateCardVisual();
+                defenderVisual.UpdateCardVisual();
+
+                // Return attacker to original position
+                yield return attackerVisual.transform.DOMove(attackerOrigPos, 0.3f)
+                    .SetEase(Ease.InQuad).WaitForCompletion();
+
+                // Restore original scales
+                attackerVisual.transform.localScale = attackerOrigScale;
+                defenderVisual.transform.localScale = defenderOrigScale;
+
+                // Mark attacker as having attacked
+                attackerCreature.hasAttackedThisTurn = true;
+
+                // Check if cards died
+                if (defenderCreature.currentHealth <= 0)
+                {
+                    // Play death animation
+                    if (defenderVisual != null)
+                    {
+                        Sequence deathSequence = DOTween.Sequence();
+
+                        // Fade out
+                        CanvasGroup canvasGroup = defenderVisual.GetComponent<CanvasGroup>();
+                        if (canvasGroup == null)
+                            canvasGroup = defenderVisual.gameObject.AddComponent<CanvasGroup>();
+
+                        deathSequence.Append(canvasGroup.DOFade(0, 0.5f));
+
+                        // Shrink
+                        deathSequence.Join(defenderVisual.transform.DOScale(Vector3.zero, 0.5f));
+
+                        // Rotate
+                        deathSequence.Join(defenderVisual.transform.DORotate(new Vector3(0, 0, 90), 0.5f, RotateMode.FastBeyond360));
+
+                        // Wait for animation to complete
+                        yield return deathSequence.WaitForCompletion();
+                    }
+
+                    // Remove from field
+                    Player defenderOwner = CardGameManager.Instance.GetCardOwner(defenderCreature);
+                    if (defenderOwner != null)
+                    {
+                        defenderOwner.RemoveCardFromField(defenderCreature);
+                    }
+                }
+
+                if (attackerCreature.currentHealth <= 0)
+                {
+                    // Play death animation
+                    if (attackerVisual != null)
+                    {
+                        Sequence deathSequence = DOTween.Sequence();
+
+                        // Fade out
+                        CanvasGroup canvasGroup = attackerVisual.GetComponent<CanvasGroup>();
+                        if (canvasGroup == null)
+                            canvasGroup = attackerVisual.gameObject.AddComponent<CanvasGroup>();
+
+                        deathSequence.Append(canvasGroup.DOFade(0, 0.5f));
+
+                        // Shrink
+                        deathSequence.Join(attackerVisual.transform.DOScale(Vector3.zero, 0.5f));
+
+                        // Rotate
+                        deathSequence.Join(attackerVisual.transform.DORotate(new Vector3(0, 0, 90), 0.5f, RotateMode.FastBeyond360));
+
+                        // Wait for animation to complete
+                        yield return deathSequence.WaitForCompletion();
+                    }
+
+                    // Remove from field
+                    Player attackerOwner = CardGameManager.Instance.GetCardOwner(attackerCreature);
+                    if (attackerOwner != null)
+                    {
+                        attackerOwner.RemoveCardFromField(attackerCreature);
+                    }
+                }
+            }
+        }
     }
 
     private IEnumerator AttackWithCreaturesRoutine()
     {
         List<Card> attackingCreatures = GetAttackingCreatures();
+        Debug.Log($"AI has {attackingCreatures.Count} creatures that can attack");
+
+        // Plan all attacks first
+        List<AttackPair> plannedAttacks = new List<AttackPair>();
+        List<Card> directAttackers = new List<Card>();
 
         foreach (Card attacker in attackingCreatures)
         {
@@ -81,9 +217,80 @@ public class AIPlayer : Player
 
             if (target != null)
             {
-                // Attack target
-                _gameManager.AttackCard(attacker, target);
-                yield return new WaitForSeconds(playCardDelay);
+                Debug.Log($"AI plans to attack {target.cardName} with {attacker.cardName}");
+                // Add to planned attacks
+                plannedAttacks.Add(new AttackPair { attacker = attacker, defender = target });
+            }
+            else
+            {
+                // Attack player directly
+                Debug.Log($"AI plans to attack player directly with {attacker.cardName}");
+                directAttackers.Add(attacker);
+            }
+        }
+
+        // Execute all attacks with animations
+        foreach (AttackPair attack in plannedAttacks)
+        {
+            yield return StartCoroutine(ExecuteAIAttackWithAnimation(attack.attacker, attack.defender));
+
+            // Wait between attacks
+            yield return new WaitForSeconds(playCardDelay);
+        }
+
+        // Execute direct attacks
+        foreach (Card attacker in directAttackers)
+        {
+            yield return StartCoroutine(ExecuteAIDirectAttackWithAnimation(attacker));
+
+            // Wait between attacks
+            yield return new WaitForSeconds(playCardDelay);
+        }
+    }
+
+    private IEnumerator ExecuteAIDirectAttackWithAnimation(Card attacker)
+    {
+        if (attacker is CreatureCard attackerCreature)
+        {
+            Debug.Log($"AI executing direct attack with {attackerCreature.cardName}");
+
+            // Get visual instance
+            CardVisual attackerVisual = attacker.visualInstance;
+
+            if (attackerVisual != null)
+            {
+                // Store original position and scale
+                Vector3 originalPos = attackerVisual.transform.position;
+                Vector3 originalScale = attackerVisual.transform.localScale;
+
+                // Ensure consistent scale during animation
+                attackerVisual.transform.localScale = Vector3.one;
+
+                // Get target position (player health)
+                Transform targetTransform = CardGameManager.Instance.playerOneHealthText.transform;
+
+                // Animate attacker moving toward player
+                yield return attackerVisual.transform.DOMove(
+                    Vector3.Lerp(originalPos, targetTransform.position, 0.7f),
+                    0.3f).SetEase(Ease.OutQuad).WaitForCompletion();
+
+                // Shake health text
+                targetTransform.DOShakePosition(0.2f, 10f, 10, 90, false, true);
+
+                // Deal damage to player
+                CardGameManager.Instance.playerOne.TakeDamage(attackerCreature.currentAttack);
+
+                // Return attacker to original position
+                yield return attackerVisual.transform.DOMove(originalPos, 0.3f)
+                    .SetEase(Ease.InQuad).WaitForCompletion();
+
+                // Mark attacker as having attacked
+                attackerCreature.hasAttackedThisTurn = true;
+
+                // Update UI
+                CardGameManager.Instance.UpdateUI();
+
+                attackerVisual.transform.localScale = originalScale;
             }
         }
     }
@@ -195,7 +402,7 @@ public class AIPlayer : Player
         return targets;
     }
 
-    public void PlayCardWithAnimation(Card card, List<Card> targets = null)
+    private bool PlayCardWithAnimation(Card card, List<Card> targets = null)
     {
         // Play the card
         bool success = PlayCard(card, targets);
@@ -203,8 +410,33 @@ public class AIPlayer : Player
         if (success && card.visualInstance != null)
         {
             // Add some visual effect to show AI is playing a card
-            card.visualInstance.GetComponent<CardVisual>().PlayAICardAnimation();
+            CardVisual cardVisual = card.visualInstance;
+
+            // Force correct scale for AI cards
+            cardVisual.transform.localScale = Vector3.one;
+
+            // Scale animation
+            cardVisual.transform.DOScale(Vector3.one * 1.2f, 0.2f)
+                .SetEase(Ease.OutQuad)
+                .OnComplete(() => {
+                    cardVisual.transform.DOScale(Vector3.one, 0.2f)
+                        .SetEase(Ease.InQuad);
+                });
+
+            // Play particles if available
+            if (cardVisual.playParticles != null)
+            {
+                cardVisual.playParticles.Play();
+            }
+
+            // Play sound if available
+            if (card.playSound != null)
+            {
+                AudioSource.PlayClipAtPoint(card.playSound, cardVisual.transform.position);
+            }
         }
+
+        return success;
     }
 
     private float GetTargetPriority(Card card)
@@ -243,16 +475,28 @@ public class AIPlayer : Player
 
     private Card GetBestAttackTarget(Card attacker)
     {
-        Player enemy = _gameManager.GetEnemyPlayer(this);
+        Player enemy = CardGameManager.Instance.GetEnemyPlayer(this);
         List<Card> enemyField = enemy.GetFieldCards();
 
+        // Remove null entries from the list
+        enemyField.RemoveAll(card => card == null);
+
+        Debug.Log($"AI looking for target. Enemy has {enemyField.Count} cards on field");
+
         // Check if there are taunt creatures
-        List<Card> tauntCreatures = enemyField.FindAll(c => c.hasTaunt);
+        List<Card> tauntCreatures = enemyField.FindAll(c => c != null && c.hasTaunt);
 
         if (tauntCreatures.Count > 0)
         {
             // Must attack taunt creatures
-            tauntCreatures.Sort((a, b) => a.health.CompareTo(b.health));
+            tauntCreatures.Sort((a, b) =>
+            {
+                CreatureCard aCreature = a as CreatureCard;
+                CreatureCard bCreature = b as CreatureCard;
+                if (aCreature != null && bCreature != null)
+                    return aCreature.currentHealth.CompareTo(bCreature.currentHealth);
+                return 0;
+            });
             return tauntCreatures[0]; // Attack weakest taunt
         }
 
@@ -260,7 +504,18 @@ public class AIPlayer : Player
         if (enemyField.Count > 0)
         {
             // Sort by attack priority
-            enemyField.Sort((a, b) => GetAttackTargetPriority(attacker, b).CompareTo(GetAttackTargetPriority(attacker, a)));
+            enemyField.Sort((a, b) =>
+            {
+                if (a == null) return 1;
+                if (b == null) return -1;
+
+                CreatureCard aCreature = a as CreatureCard;
+                CreatureCard bCreature = b as CreatureCard;
+
+                if (aCreature != null && bCreature != null)
+                    return GetAttackTargetPriority(attacker, b).CompareTo(GetAttackTargetPriority(attacker, a));
+                return 0;
+            });
 
             // Check if we can make favorable trades
             if (GetAttackTargetPriority(attacker, enemyField[0]) > 0)
@@ -269,8 +524,8 @@ public class AIPlayer : Player
             }
         }
 
-        // If no good creature targets or empty board, attack player directly
-        return null; // Null means attack player
+        // If no good creature targets or empty board, return null (will attack player directly)
+        return null;
     }
 
     private float GetAttackTargetPriority(Card attacker, Card defender)

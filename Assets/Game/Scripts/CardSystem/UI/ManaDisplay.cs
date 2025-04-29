@@ -78,11 +78,11 @@ public class ManaDisplay : MonoBehaviour
             Image crystalImage = crystal.GetComponent<Image>();
             Color targetColor = filled ? new Color(0, 0.5f, 1f) : new Color(0.3f, 0.3f, 0.3f);
 
-            // Animate color change
+            // Animate color change without scaling
             crystalImage.DOColor(targetColor, 0.3f);
 
-            // Add a little bounce effect
-            crystal.transform.DOPunchScale(Vector3.one * 0.2f, 0.3f, 5, 0.5f);
+            // Ensure crystal is at correct scale
+            crystal.transform.localScale = Vector3.one;
         }
     }
 
@@ -100,8 +100,11 @@ public class ManaDisplay : MonoBehaviour
                 sequence.Append(crystalImage.DOColor(Color.white, 0.15f));
                 sequence.Append(crystalImage.DOColor(new Color(0.3f, 0.3f, 0.3f), 0.15f));
 
-                // Shake the crystal
+                // Shake the crystal without scaling
                 crystal.transform.DOShakePosition(0.3f, 5f, 10, 90, false, true);
+
+                // Ensure crystal is at correct scale
+                crystal.transform.localScale = Vector3.one;
             }
         }
     }

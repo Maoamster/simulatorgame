@@ -136,7 +136,7 @@ public class GameBoardVisuals : MonoBehaviour
         {
             // Rotate indicator to point to current player
             float targetRotation = isPlayerTurn ? 0 : 180;
-            turnIndicator.transform.DORotate(new Vector3(0, 0, targetRotation), 0.5f, RotateMode.Fast)
+            turnIndicator.transform.DORotate(new Vector3(45, 0, targetRotation), 0.5f, RotateMode.Fast)
                 .SetEase(Ease.OutBack);
 
             // Change color based on turn

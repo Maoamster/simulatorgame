@@ -142,17 +142,14 @@ public class CardGameManager : MonoBehaviour
         if (_selectedAttacker != null)
         {
             _selectedAttacker.SetSelected(false);
+            _selectedAttacker.ClearAttackLine(); // Clear any existing attack line
         }
 
         // Set new attacker
         _selectedAttacker = cardVisual;
         _selectedAttacker.SetSelected(true);
 
-        // Play selection sound
-        if (cardSelectSound != null)
-        {
-            AudioSource.PlayClipAtPoint(cardSelectSound, Camera.main.transform.position);
-        }
+        Debug.Log($"Selected attacker: {cardVisual.GetCard().cardName}");
     }
 
     public void DeselectAttacker(CardVisual cardVisual)
@@ -188,14 +185,21 @@ public class CardGameManager : MonoBehaviour
                 defender = targetCard
             });
 
-            // Update visuals
-            _selectedAttacker.SetAttackTarget(targetCard);
+            // Update visuals - draw attack line from attacker to target
+            _selectedAttacker.SetAttackTarget(targetCardVisual);
             targetCardVisual.SetTargeted(true);
 
             // Deselect attacker
             _selectedAttacker.SetSelected(false);
             _selectedAttacker = null;
+
+            Debug.Log($"Set attack target: {targetCard.cardName}");
         }
+    }
+
+    public bool HasSelectedAttacker()
+    {
+        return _selectedAttacker != null;
     }
 
     private bool IsValidAttackTarget(Card attacker, Card defender)
@@ -207,9 +211,23 @@ public class CardGameManager : MonoBehaviour
         if (attackerOwner == defenderOwner)
             return false;
 
-        // Check if defender has taunt
-        if (defenderOwner.HasTauntCreatures() && !defender.hasTaunt)
+        // Check if defender is on the field
+        if (!defenderOwner.GetFieldCards().Contains(defender))
             return false;
+
+        // Check if defender has taunt
+        if (defenderOwner.HasTauntCreatures())
+        {
+            // If defender doesn't have taunt, check if there are other taunt creatures
+            if (!defender.hasTaunt)
+            {
+                foreach (Card card in defenderOwner.GetFieldCards())
+                {
+                    if (card != null && card.hasTaunt)
+                        return false; // Can't attack non-taunt when taunt exists
+                }
+            }
+        }
 
         return true;
     }
@@ -361,14 +379,25 @@ public class CardGameManager : MonoBehaviour
 
         // Update UI
         UpdateUI();
-        endTurnButton.interactable = true;
 
-        // If it's AI's turn, trigger AI logic
+        // Enable/disable end turn button based on whose turn it is
+        endTurnButton.interactable = isPlayerOneTurn;
+
+        // If it's AI's turn, trigger AI logic with a slight delay
         if (currentPlayer is AIPlayer aiPlayer)
         {
             Debug.Log("Starting AI turn");
-            aiPlayer.StartAITurn();
+            StartCoroutine(DelayedAITurn(aiPlayer));
         }
+    }
+
+    private IEnumerator DelayedAITurn(AIPlayer aiPlayer)
+    {
+        // Wait a moment before AI starts its turn
+        yield return new WaitForSeconds(1f);
+
+        // Start AI turn
+        aiPlayer.StartAITurn();
     }
 
     private void ProcessDelayedEffects()
@@ -482,8 +511,90 @@ public class CardGameManager : MonoBehaviour
         }
     }
 
+    public void AttackPlayer(Card attacker, Player defender)
+    {
+        if (attacker is CreatureCard attackerCreature)
+        {
+            Debug.Log($"{attackerCreature.cardName} attacks player {defender.playerName} directly");
+
+            // Deal damage to player
+            defender.TakeDamage(attackerCreature.currentAttack);
+
+            // Mark attacker as having attacked
+            attackerCreature.hasAttackedThisTurn = true;
+
+            // Play attack animation
+            if (attacker.visualInstance != null)
+            {
+                // Store original position
+                Vector3 originalPos = attacker.visualInstance.transform.position;
+
+                // Get target position (player health)
+                Transform targetTransform = defender == playerOne ?
+                    playerOneHealthText.transform : playerTwoHealthText.transform;
+
+                // Animate attacker moving toward player
+                attacker.visualInstance.transform.DOMove(
+                    Vector3.Lerp(originalPos, targetTransform.position, 0.7f),
+                    0.3f).SetEase(Ease.OutQuad)
+                    .OnComplete(() => {
+                        // Shake health text
+                        targetTransform.DOShakePosition(0.2f, 10f, 10, 90, false, true);
+
+                        // Return to original position
+                        attacker.visualInstance.transform.DOMove(originalPos, 0.3f)
+                            .SetEase(Ease.InQuad);
+                    });
+            }
+
+            // Update UI
+            UpdateUI();
+        }
+    }
+
+    public Player GetPlayerUnderMouse()
+    {
+        // Cast a ray from the mouse position
+        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+        RaycastHit2D[] hits = Physics2D.RaycastAll(ray.origin, ray.direction);
+
+        foreach (RaycastHit2D hit in hits)
+        {
+            if (hit.collider != null)
+            {
+                // Check if we hit player health area
+                if (hit.collider.CompareTag("PlayerHealth"))
+                {
+                    return playerOne;
+                }
+                else if (hit.collider.CompareTag("OpponentHealth"))
+                {
+                    return playerTwo;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public void EndTurn()
     {
+        // Clear any targeting lines
+        if (_selectedAttacker != null)
+        {
+            _selectedAttacker.SetSelected(false);
+            _selectedAttacker = null;
+        }
+
+        // Clear all targeting visuals
+        foreach (AttackPair attack in _pendingAttacks)
+        {
+            if (attack.defender.visualInstance != null)
+            {
+                attack.defender.visualInstance.SetTargeted(false);
+            }
+        }
+
         // Process all pending attacks
         StartCoroutine(ProcessAttacksSequentially());
     }
@@ -540,15 +651,20 @@ public class CardGameManager : MonoBehaviour
 
             if (attackerVisual != null && defenderVisual != null)
             {
-                // Store original position
-                Vector3 originalPos = attackerVisual.transform.position;
+                // Store original positions and scales
+                Vector3 attackerOrigPos = attackerVisual.transform.position;
+                Vector3 attackerOrigScale = attackerVisual.transform.localScale;
+                Vector3 defenderOrigScale = defenderVisual.transform.localScale;
+
+                attackerVisual.transform.localScale = Vector3.one;
+                defenderVisual.transform.localScale = Vector3.one;
 
                 // Debug log to track damage values
-                Debug.Log($"ATTACK: {attackerCreature.cardName} ({attackerCreature.currentAttack}) vs {defenderCreature.cardName} ({defenderCreature.currentAttack})");
+                Debug.Log($"ATTACK: {attackerCreature.cardName} ({attackerCreature.currentAttack}) vs {defenderCreature.cardName} ({defenderCreature.currentHealth})");
 
                 // Animate attacker moving toward defender
                 yield return attackerVisual.transform.DOMove(
-                    Vector3.Lerp(originalPos, defenderVisual.transform.position, 0.7f),
+                    Vector3.Lerp(attackerOrigPos, defenderVisual.transform.position, 0.7f),
                     0.3f).SetEase(Ease.OutQuad).WaitForCompletion();
 
                 // Shake defender to show impact
@@ -560,13 +676,19 @@ public class CardGameManager : MonoBehaviour
 
                 Debug.Log($"AFTER ATTACK: {attackerCreature.cardName} (Health:{attackerCreature.currentHealth}) vs {defenderCreature.cardName} (Health:{defenderCreature.currentHealth})");
 
-                // Update visuals
-                attackerVisual.UpdateCardVisual();
-                defenderVisual.UpdateCardVisual();
+                // Update visuals - check if they still exist
+                if (attackerVisual != null && attackerVisual.gameObject != null)
+                    attackerVisual.UpdateCardVisual();
 
-                // Return attacker to original position
-                yield return attackerVisual.transform.DOMove(originalPos, 0.3f)
-                    .SetEase(Ease.InQuad).WaitForCompletion();
+                if (defenderVisual != null && defenderVisual.gameObject != null)
+                    defenderVisual.UpdateCardVisual();
+
+                // Return attacker to original position - check if it still exists
+                if (attackerVisual != null && attackerVisual.gameObject != null)
+                {
+                    yield return attackerVisual.transform.DOMove(attackerOrigPos, 0.3f)
+                        .SetEase(Ease.InQuad).WaitForCompletion();
+                }
 
                 // Mark attacker as having attacked
                 attackerCreature.hasAttackedThisTurn = true;
@@ -574,6 +696,13 @@ public class CardGameManager : MonoBehaviour
                 // Check if cards died
                 yield return StartCoroutine(CheckCardDeathWithAnimation(defenderCreature));
                 yield return StartCoroutine(CheckCardDeathWithAnimation(attackerCreature));
+
+                // Restore scales - check if they still exist
+                if (attackerVisual != null && attackerVisual.gameObject != null)
+                    attackerVisual.transform.localScale = attackerOrigScale;
+
+                if (defenderVisual != null && defenderVisual.gameObject != null)
+                    defenderVisual.transform.localScale = defenderOrigScale;
             }
         }
     }
@@ -589,7 +718,7 @@ public class CardGameManager : MonoBehaviour
 
             CardVisual cardVisual = card.visualInstance;
 
-            if (cardVisual != null)
+            if (cardVisual != null && cardVisual.gameObject != null)
             {
                 // Play death animation
                 Sequence deathSequence = DOTween.Sequence();
@@ -609,6 +738,12 @@ public class CardGameManager : MonoBehaviour
 
                 // Wait for animation to complete
                 yield return deathSequence.WaitForCompletion();
+
+                // Clear the card's visual reference before destroying it
+                card.visualInstance = null;
+
+                // Destroy the visual
+                Destroy(cardVisual.gameObject);
             }
 
             // Remove from field
@@ -776,18 +911,21 @@ public class CardGameManager : MonoBehaviour
     {
         // Cast a ray from the mouse position
         Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit2D hit = Physics2D.Raycast(ray.origin, ray.direction);
+        RaycastHit2D[] hits = Physics2D.RaycastAll(ray.origin, ray.direction);
 
-        if (hit.collider != null)
+        foreach (RaycastHit2D hit in hits)
         {
-            CardVisual cardVisual = hit.collider.GetComponent<CardVisual>();
-            if (cardVisual != null)
+            if (hit.collider != null)
             {
-                // Check if it's an enemy card
-                Player cardOwner = cardVisual.GetOwner();
-                if (cardOwner != _targetingPlayer)
+                CardVisual cardVisual = hit.collider.GetComponent<CardVisual>();
+                if (cardVisual != null)
                 {
-                    return cardVisual.GetCard();
+                    // Check if it's an enemy card
+                    Player cardOwner = cardVisual.GetOwner();
+                    if (cardOwner != _targetingPlayer)
+                    {
+                        return cardVisual.GetCard();
+                    }
                 }
             }
         }
@@ -819,7 +957,7 @@ public class CardGameManager : MonoBehaviour
     {
         if (attacker is CreatureCard attackerCreature && defender is CreatureCard defenderCreature)
         {
-            Debug.Log($"Direct attack: {attackerCreature.cardName} ({attackerCreature.currentAttack}) vs {defenderCreature.cardName} ({defenderCreature.currentAttack})");
+            Debug.Log($"Direct attack: {attackerCreature.cardName} ({attackerCreature.currentAttack}) vs {defenderCreature.cardName} ({defenderCreature.currentHealth})");
 
             // Apply damage - use currentAttack instead of attack
             defenderCreature.TakeDamage(attackerCreature.currentAttack);
@@ -880,7 +1018,7 @@ public class CardGameManager : MonoBehaviour
         }
     }
 
-    private void UpdateUI()
+    public void UpdateUI()
     {
         // Update health displays
         if (playerHealthDisplay != null)

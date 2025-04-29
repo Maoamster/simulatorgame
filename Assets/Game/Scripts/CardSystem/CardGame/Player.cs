@@ -233,7 +233,15 @@ public class Player : MonoBehaviour
         _deck.Clear();
         foreach (Card card in deckCards)
         {
-            _deck.Add(Instantiate(card)); // Create instance of scriptable object
+            Card newCard = Instantiate(card); // Create instance of scriptable object
+
+            // Initialize creature card stats
+            if (newCard is CreatureCard creatureCard)
+            {
+                creatureCard.InitializeStats();
+            }
+
+            _deck.Add(newCard);
         }
     }
 
@@ -292,7 +300,19 @@ public class Player : MonoBehaviour
             _deck.RemoveAt(0);
 
             // Create card visual in hand
-            CreateCardVisual(drawnCard, handArea);
+            GameObject cardObj = Instantiate(cardPrefab, handArea);
+            CardVisual cardVisual = cardObj.GetComponent<CardVisual>();
+
+            if (cardVisual != null)
+            {
+                cardVisual.SetupCard(drawnCard, this);
+
+                // Force correct scale for opponent cards
+                if (this != CardGameManager.Instance.playerOne)
+                {
+                    cardVisual.transform.localScale = Vector3.one;
+                }
+            }
         }
     }
 
@@ -475,6 +495,12 @@ public class Player : MonoBehaviour
 
         if (cardVisual != null)
         {
+            // Ensure creature card stats are initialized
+            if (card is CreatureCard creatureCard && creatureCard.currentHealth <= 0)
+            {
+                creatureCard.InitializeStats();
+            }
+
             cardVisual.SetupCard(card, this);
         }
     }
