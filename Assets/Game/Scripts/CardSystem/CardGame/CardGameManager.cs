@@ -269,7 +269,8 @@ public class CardGameManager : MonoBehaviour
                     burnSequence.Join(burnImage.DOColor(Color.red, 0.3f));
                     burnSequence.Append(burnRect.DOScale(0, 0.3f));
                     burnSequence.Join(burnImage.DOFade(0, 0.3f));
-                    burnSequence.OnComplete(() => {
+                    burnSequence.OnComplete(() =>
+                    {
                         Destroy(burnVisual);
                     });
                 }
@@ -436,26 +437,48 @@ public class CardGameManager : MonoBehaviour
         }
     }
 
-    public void PlayCardToSlot(Card card, int slotIndex)
+    public bool PlayCardToSlot(Card card, int slotIndex)
     {
-        // Check if card is playable
         Player currentPlayer = isPlayerOneTurn ? playerOne : playerTwo;
 
-        if (currentPlayer.GetHandCards().Contains(card) &&
-            card.manaCost <= currentPlayer.currentMana &&
-            slotIndex >= 0 && slotIndex < currentPlayer.maxFieldSize)
-        {
-            // Play the card
-            bool success = currentPlayer.PlayCardToSlot(card, slotIndex);
+        // Check if card is playable
+        if (!currentPlayer.GetHandCards().Contains(card))
+            return false;
 
-            if (success)
-            {
-                // Update the board visuals
-                if (boardVisuals != null)
-                {
-                    boardVisuals.PlayFieldParticles(true);
-                }
-            }
+        if (currentPlayer.currentMana < card.manaCost)
+            return false;
+
+        if (card.type != Card.CardType.Creature)
+            return false;
+
+        // Play the card to the specific slot
+        bool success = currentPlayer.PlayCardToSlot(card, slotIndex);
+
+        if (success && boardVisuals != null)
+        {
+            // Play visual effects
+            boardVisuals.PlayFieldParticles(isPlayerOneTurn);
+        }
+
+        return success;
+    }
+
+    public void SpendMana(Player player, int amount)
+    {
+        // Ensure we don't go below zero
+        int actualAmount = Mathf.Min(player.currentMana, amount);
+        player.currentMana -= actualAmount;
+
+        // Update mana display with animation
+        if (player == playerOne && playerManaDisplay != null)
+        {
+            playerManaDisplay.AnimateManaCrystalUse(actualAmount);
+            playerManaDisplay.UpdateManaDisplay(player.currentMana, player.maxMana);
+        }
+        else if (player == playerTwo && opponentManaDisplay != null)
+        {
+            opponentManaDisplay.AnimateManaCrystalUse(actualAmount);
+            opponentManaDisplay.UpdateManaDisplay(player.currentMana, player.maxMana);
         }
     }
 
@@ -520,29 +543,22 @@ public class CardGameManager : MonoBehaviour
                 // Store original position
                 Vector3 originalPos = attackerVisual.transform.position;
 
-                // Play attack sound
-                if (attackSound != null)
-                {
-                    AudioSource.PlayClipAtPoint(attackSound, attackerVisual.transform.position);
-                }
+                // Debug log to track damage values
+                Debug.Log($"ATTACK: {attackerCreature.cardName} ({attackerCreature.currentAttack}) vs {defenderCreature.cardName} ({defenderCreature.currentAttack})");
 
                 // Animate attacker moving toward defender
                 yield return attackerVisual.transform.DOMove(
                     Vector3.Lerp(originalPos, defenderVisual.transform.position, 0.7f),
                     0.3f).SetEase(Ease.OutQuad).WaitForCompletion();
 
-                // Play damage sound
-                if (damageSound != null)
-                {
-                    AudioSource.PlayClipAtPoint(damageSound, defenderVisual.transform.position);
-                }
-
                 // Shake defender to show impact
                 defenderVisual.transform.DOShakePosition(0.2f, 10f, 10, 90, false, true);
 
-                // Apply damage
-                defenderCreature.TakeDamage(attackerCreature.attack);
-                attackerCreature.TakeDamage(defenderCreature.attack);
+                // Apply damage - use currentAttack instead of attack
+                defenderCreature.TakeDamage(attackerCreature.currentAttack);
+                attackerCreature.TakeDamage(defenderCreature.currentAttack);
+
+                Debug.Log($"AFTER ATTACK: {attackerCreature.cardName} (Health:{attackerCreature.currentHealth}) vs {defenderCreature.cardName} (Health:{defenderCreature.currentHealth})");
 
                 // Update visuals
                 attackerVisual.UpdateCardVisual();
@@ -564,8 +580,13 @@ public class CardGameManager : MonoBehaviour
 
     private IEnumerator CheckCardDeathWithAnimation(CreatureCard card)
     {
-        if (card.health <= 0)
+        // Debug to check if this method is being called
+        Debug.Log($"Checking if {card.cardName} should die. Health: {card.currentHealth}");
+
+        if (card.currentHealth <= 0)
         {
+            Debug.Log($"{card.cardName} has died!");
+
             CardVisual cardVisual = card.visualInstance;
 
             if (cardVisual != null)
@@ -574,7 +595,11 @@ public class CardGameManager : MonoBehaviour
                 Sequence deathSequence = DOTween.Sequence();
 
                 // Fade out
-                deathSequence.Append(cardVisual.GetComponent<CanvasGroup>().DOFade(0, 0.5f));
+                CanvasGroup canvasGroup = cardVisual.GetComponent<CanvasGroup>();
+                if (canvasGroup == null)
+                    canvasGroup = cardVisual.gameObject.AddComponent<CanvasGroup>();
+
+                deathSequence.Append(canvasGroup.DOFade(0, 0.5f));
 
                 // Shrink
                 deathSequence.Join(cardVisual.transform.DOScale(Vector3.zero, 0.5f));
@@ -590,6 +615,7 @@ public class CardGameManager : MonoBehaviour
             Player owner = GetCardOwner(card);
             if (owner != null)
             {
+                Debug.Log($"Removing {card.cardName} from {owner.playerName}'s field");
                 owner.RemoveCardFromField(card);
             }
         }
@@ -793,16 +819,16 @@ public class CardGameManager : MonoBehaviour
     {
         if (attacker is CreatureCard attackerCreature && defender is CreatureCard defenderCreature)
         {
-            Debug.Log($"{attackerCreature.cardName} (ATK:{attackerCreature.attack}) attacks {defenderCreature.cardName} (ATK:{defenderCreature.attack})");
+            Debug.Log($"Direct attack: {attackerCreature.cardName} ({attackerCreature.currentAttack}) vs {defenderCreature.cardName} ({defenderCreature.currentAttack})");
 
-            // Apply damage to both cards
-            defenderCreature.TakeDamage(attackerCreature.attack);
-            attackerCreature.TakeDamage(defenderCreature.attack);
+            // Apply damage - use currentAttack instead of attack
+            defenderCreature.TakeDamage(attackerCreature.currentAttack);
+            attackerCreature.TakeDamage(defenderCreature.currentAttack);
 
-            Debug.Log($"After combat: {attackerCreature.cardName} (HP:{attackerCreature.health}), {defenderCreature.cardName} (HP:{defenderCreature.health})");
+            Debug.Log($"After direct attack: {attackerCreature.cardName} (Health:{attackerCreature.currentHealth}) vs {defenderCreature.cardName} (Health:{defenderCreature.currentHealth})");
 
             // Mark attacker as having attacked this turn
-            attackerCreature.canAttackThisTurn = false;
+            attackerCreature.hasAttackedThisTurn = true;
 
             // Play attack sound
             if (attacker.attackSound != null && attacker.visualInstance != null)
@@ -811,8 +837,23 @@ public class CardGameManager : MonoBehaviour
             }
 
             // Check if cards died
-            CheckCardDeath(defenderCreature);
-            CheckCardDeath(attackerCreature);
+            if (defenderCreature.currentHealth <= 0)
+            {
+                Player defenderOwner = GetCardOwner(defenderCreature);
+                if (defenderOwner != null)
+                {
+                    defenderOwner.RemoveCardFromField(defenderCreature);
+                }
+            }
+
+            if (attackerCreature.currentHealth <= 0)
+            {
+                Player attackerOwner = GetCardOwner(attackerCreature);
+                if (attackerOwner != null)
+                {
+                    attackerOwner.RemoveCardFromField(attackerCreature);
+                }
+            }
 
             // Update visuals
             if (attacker.visualInstance != null)

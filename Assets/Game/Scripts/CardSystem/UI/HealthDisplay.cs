@@ -71,9 +71,22 @@ public class HealthDisplay : MonoBehaviour
                 damageText.text = "-" + amount.ToString();
             }
 
+            // Make sure the CanvasGroup exists
+            CanvasGroup canvasGroup = effect.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+                canvasGroup = effect.AddComponent<CanvasGroup>();
+
             // Animate the damage text
-            effect.transform.DOLocalMoveY(100f, 1f);
-            effect.GetComponent<CanvasGroup>().DOFade(0, 1f).OnComplete(() => {
+            Sequence sequence = DOTween.Sequence();
+
+            // Move up
+            sequence.Append(effect.transform.DOLocalMoveY(100f, 1f));
+
+            // Fade out
+            sequence.Join(canvasGroup.DOFade(0, 1f));
+
+            // Destroy when complete
+            sequence.OnComplete(() => {
                 Destroy(effect);
             });
         }
@@ -94,9 +107,22 @@ public class HealthDisplay : MonoBehaviour
                 healText.text = "+" + amount.ToString();
             }
 
+            // Make sure the CanvasGroup exists
+            CanvasGroup canvasGroup = effect.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+                canvasGroup = effect.AddComponent<CanvasGroup>();
+
             // Animate the heal text
-            effect.transform.DOLocalMoveY(100f, 1f);
-            effect.GetComponent<CanvasGroup>().DOFade(0, 1f).OnComplete(() => {
+            Sequence sequence = DOTween.Sequence();
+
+            // Move up
+            sequence.Append(effect.transform.DOLocalMoveY(100f, 1f));
+
+            // Fade out
+            sequence.Join(canvasGroup.DOFade(0, 1f));
+
+            // Destroy when complete
+            sequence.OnComplete(() => {
                 Destroy(effect);
             });
         }

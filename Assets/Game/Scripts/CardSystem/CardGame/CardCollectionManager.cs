@@ -153,11 +153,12 @@ public class CardCollectionManager : MonoBehaviour
         // Save the starter collection
         SaveCollection();
     }
-}
 
-[System.Serializable]
-public class CollectionData
-{
-    public List<string> cardIDs = new List<string>();
-    public List<int> cardCounts = new List<int>();
+    [System.Serializable]
+    public class CollectionData
+    {
+        public List<string> cardIDs = new List<string>();
+        public List<int> cardCounts = new List<int>();
+    }
+
 }

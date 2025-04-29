@@ -218,8 +218,35 @@ public class CardVisual : MonoBehaviour, IPointerEnterHandler, IPointerExitHandl
         // Update stats for creatures
         if (_card.type == Card.CardType.Creature && creatureStatsPanel.activeSelf)
         {
-            attackText.text = _card.attack.ToString();
-            healthText.text = _card.health.ToString();
+            CreatureCard creatureCard = _card as CreatureCard;
+            if (creatureCard != null)
+            {
+                attackText.text = creatureCard.currentAttack.ToString();
+                healthText.text = creatureCard.currentHealth.ToString();
+
+                // Visual feedback for damaged cards
+                if (creatureCard.currentHealth < creatureCard.health)
+                {
+                    healthText.color = Color.red;
+                }
+                else
+                {
+                    healthText.color = Color.white;
+                }
+
+                if (creatureCard.currentAttack > creatureCard.attack)
+                {
+                    attackText.color = Color.green;
+                }
+                else if (creatureCard.currentAttack < creatureCard.attack)
+                {
+                    attackText.color = new Color(1f, 0.5f, 0f); // Orange
+                }
+                else
+                {
+                    attackText.color = Color.white;
+                }
+            }
         }
     }
 

@@ -115,44 +115,47 @@ public class Player : MonoBehaviour
             return false;
 
         // Check if slot is already occupied
-        if (_field.Count > slotIndex && _field[slotIndex] != null)
+        while (_field.Count <= slotIndex)
+        {
+            _field.Add(null);
+        }
+
+        if (_field[slotIndex] != null)
             return false;
 
-        // Pay mana cost
-        currentMana -= card.manaCost;
-
-        // Update mana display
-        if (CardGameManager.Instance.playerManaDisplay != null && this == CardGameManager.Instance.playerOne)
+        // Pay mana cost - use CardGameManager to handle this
+        if (CardGameManager.Instance != null)
         {
-            CardGameManager.Instance.playerManaDisplay.AnimateManaCrystalUse(card.manaCost);
-            CardGameManager.Instance.playerManaDisplay.UpdateManaDisplay(currentMana, maxMana);
+            CardGameManager.Instance.SpendMana(this, card.manaCost);
         }
-        else if (CardGameManager.Instance.opponentManaDisplay != null && this == CardGameManager.Instance.playerTwo)
+        else
         {
-            CardGameManager.Instance.opponentManaDisplay.AnimateManaCrystalUse(card.manaCost);
-            CardGameManager.Instance.opponentManaDisplay.UpdateManaDisplay(currentMana, maxMana);
+            // Fallback if CardGameManager is not available
+            currentMana -= card.manaCost;
         }
 
         // Remove from hand
         _hand.Remove(card);
 
-        // Add to field at specific index
-        while (_field.Count <= slotIndex)
-        {
-            _field.Add(null);
-        }
+        // Add to field at specific slot
         _field[slotIndex] = card;
 
-        // Create card visual on field
+        // Create or move card visual
         if (card.visualInstance != null)
         {
-            // Move existing visual
+            // Move existing visual to field
             card.visualInstance.transform.SetParent(fieldArea);
             card.visualInstance.SetFieldCard();
 
             // Position at the correct slot
-            RectTransform slotRect = fieldArea.GetChild(slotIndex).GetComponent<RectTransform>();
-            card.visualInstance.GetComponent<RectTransform>().anchoredPosition = slotRect.anchoredPosition;
+            if (fieldArea.childCount > slotIndex)
+            {
+                Transform slotTransform = fieldArea.GetChild(slotIndex);
+                if (slotTransform != null)
+                {
+                    card.visualInstance.transform.position = slotTransform.position;
+                }
+            }
 
             // Play animation
             card.visualInstance.PlayCardAnimation();
@@ -169,11 +172,14 @@ public class Player : MonoBehaviour
                 cardVisual.SetFieldCard();
 
                 // Position at the correct slot
-                RectTransform slotRect = fieldArea.GetChild(slotIndex).GetComponent<RectTransform>();
-                cardVisual.GetComponent<RectTransform>().anchoredPosition = slotRect.anchoredPosition;
-
-                // Play animation
-                cardVisual.PlayCardAnimation();
+                if (fieldArea.childCount > slotIndex)
+                {
+                    Transform slotTransform = fieldArea.GetChild(slotIndex);
+                    if (slotTransform != null)
+                    {
+                        cardObj.transform.position = slotTransform.position;
+                    }
+                }
             }
         }
 
@@ -294,7 +300,7 @@ public class Player : MonoBehaviour
     {
         foreach (Card card in _field)
         {
-            if (card.hasTaunt)
+            if (card != null && card.hasTaunt)
                 return true;
         }
         return false;
@@ -302,14 +308,28 @@ public class Player : MonoBehaviour
 
     public void RemoveCardFromField(Card card)
     {
-        if (_field.Contains(card))
+        int index = _field.IndexOf(card);
+
+        if (index >= 0)
         {
-            _field.Remove(card);
+            _field[index] = null;
+            _graveyard.Add(card);
 
             // If the card has a visual instance, destroy it
             if (card.visualInstance != null)
             {
                 Destroy(card.visualInstance.gameObject);
+            }
+
+            // Clear the slot
+            if (fieldArea.childCount > index)
+            {
+                Transform slotTransform = fieldArea.GetChild(index);
+                CardSlotDropZone slotZone = slotTransform.GetComponent<CardSlotDropZone>();
+                if (slotZone != null)
+                {
+                    slotZone.ClearSlot();
+                }
             }
         }
     }
@@ -341,8 +361,16 @@ public class Player : MonoBehaviour
         if (card.type == Card.CardType.Creature && _field.Count >= maxFieldSize)
             return false;
 
-        // Pay mana cost
-        currentMana -= card.manaCost;
+        // Pay mana cost - use CardGameManager to handle this
+        if (CardGameManager.Instance != null)
+        {
+            CardGameManager.Instance.SpendMana(this, card.manaCost);
+        }
+        else
+        {
+            // Fallback if CardGameManager is not available
+            currentMana -= card.manaCost;
+        }
 
         // Remove from hand
         _hand.Remove(card);
@@ -422,7 +450,7 @@ public class Player : MonoBehaviour
         // Reset creature attacks
         foreach (Card card in _field)
         {
-            if (card is CreatureCard creatureCard)
+            if (card != null && card is CreatureCard creatureCard)
             {
                 creatureCard.canAttackThisTurn = true;
             }

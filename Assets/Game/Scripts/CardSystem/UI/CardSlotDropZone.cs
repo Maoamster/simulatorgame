@@ -7,6 +7,7 @@ public class CardSlotDropZone : MonoBehaviour, IDropHandler, IPointerEnterHandle
     public bool isPlayerSlot = true;
 
     private CardSlotVisual _visual;
+    private Card _occupyingCard = null;
 
     private void Awake()
     {
@@ -16,17 +17,27 @@ public class CardSlotDropZone : MonoBehaviour, IDropHandler, IPointerEnterHandle
     public void OnDrop(PointerEventData eventData)
     {
         // Get the dragged card
-        CardVisual cardVisual = eventData.pointerDrag.GetComponent<CardVisual>();
+        CardVisual cardVisual = eventData.pointerDrag?.GetComponent<CardVisual>();
 
-        if (cardVisual != null && isPlayerSlot)
+        if (cardVisual != null && isPlayerSlot && cardVisual.IsPlayable())
         {
-            // Notify the game manager that a card was dropped on this slot
-            CardGameManager.Instance.PlayCardToSlot(cardVisual.GetCard(), slotIndex);
-
-            // Show visual feedback
-            if (_visual != null)
+            // Check if slot is empty
+            if (_occupyingCard == null)
             {
-                _visual.ShowCardPlaced();
+                // Notify the game manager that a card was dropped on this slot
+                bool success = CardGameManager.Instance.PlayCardToSlot(cardVisual.GetCard(), slotIndex);
+
+                if (success)
+                {
+                    // Store reference to the card
+                    _occupyingCard = cardVisual.GetCard();
+
+                    // Show visual feedback
+                    if (_visual != null)
+                    {
+                        _visual.ShowCardPlaced();
+                    }
+                }
             }
         }
     }
@@ -40,10 +51,14 @@ public class CardSlotDropZone : MonoBehaviour, IDropHandler, IPointerEnterHandle
 
             if (cardVisual != null && isPlayerSlot && cardVisual.IsPlayable())
             {
-                // Highlight this slot
-                if (_visual != null)
+                // Only highlight if slot is empty
+                if (_occupyingCard == null)
                 {
-                    _visual.Highlight(true);
+                    // Highlight this slot
+                    if (_visual != null)
+                    {
+                        _visual.Highlight(true);
+                    }
                 }
             }
         }
@@ -55,6 +70,35 @@ public class CardSlotDropZone : MonoBehaviour, IDropHandler, IPointerEnterHandle
         if (_visual != null)
         {
             _visual.Highlight(false);
+        }
+    }
+
+    public void SetOccupyingCard(Card card)
+    {
+        _occupyingCard = card;
+
+        // Update visual state
+        if (_visual != null)
+        {
+            if (_occupyingCard != null)
+            {
+                _visual.ShowCardPlaced();
+            }
+            else
+            {
+                _visual.ShowCardRemoved();
+            }
+        }
+    }
+
+    public void ClearSlot()
+    {
+        _occupyingCard = null;
+
+        // Update visual state
+        if (_visual != null)
+        {
+            _visual.ShowCardRemoved();
         }
     }
 }

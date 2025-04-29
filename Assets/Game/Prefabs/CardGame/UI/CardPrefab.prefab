@@ -5769,8 +5769,8 @@ MonoBehaviour:
   hoverDuration: 0.2
   dragScale: 1.1
   playAnimDuration: 0.5
-  selectionHighlight: {fileID: 5624124086381566526}
-  targetedHighlight: {fileID: 4278061854488410869}
+  selectionHighlight: {fileID: 9088680973834434056}
+  targetedHighlight: {fileID: 8500427794724503245}
 --- !u!114 &6717689349805828064
 MonoBehaviour:
   m_ObjectHideFlags: 0

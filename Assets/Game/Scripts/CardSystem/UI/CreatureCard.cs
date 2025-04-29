@@ -39,8 +39,9 @@ public class CreatureCard : Card
 
     public void TakeDamage(int amount)
     {
-        health -= amount;
-        Debug.Log($"{cardName} takes {amount} damage, health now {health}");
+        // Modify currentHealth, not health (which is the base stat)
+        currentHealth -= amount;
+        Debug.Log($"{cardName} takes {amount} damage, health now {currentHealth}");
 
         // Update visual if available
         if (visualInstance != null)
